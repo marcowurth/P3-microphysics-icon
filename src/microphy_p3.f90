@@ -27,7 +27,7 @@
 !    https://github.com/P3-microphysics/P3-microphysics                                    !
 !__________________________________________________________________________________________!
 !                                                                                          !
-! Version:       5.5.0-rc9+dev-RPNA_changes                                                !
+! Version:       5.5.0-rc10                                                                !
 ! Last updated:  2025 Nov                                                                  !
 !__________________________________________________________________________________________!
 
@@ -126,7 +126,8 @@
 
 !==================================================================================================!
 
- subroutine p3_init(lookup_file_dir,nCat,trplMomI,liqfrac,model,stat,abort_on_err,dowr,p3_autoAccr_param)
+ subroutine p3_init(lookup_file_dir,nCat,trplMomI,liqfrac,model,stat,abort_on_err,dowr,  &
+                    autoAccr_param_in)
 
 !------------------------------------------------------------------------------------------!
 ! This subroutine initializes all physical constants and parameters needed by the P3       !
@@ -150,11 +151,11 @@
  logical,          intent(in),  optional  :: abort_on_err       ! abort when an error is encountered [.false.]
  character(len=*), intent(in),  optional  :: model              ! driving model
  logical,          intent(in),  optional  :: dowr
- integer,          intent(in),  optional  :: p3_autoAccr_param  ! 1:Seifert & Beheng 2000, 2:K&K 2000 (default), 3: Kogan 2013 
+ integer,          intent(in),  optional  :: autoAccr_param_in  ! switch for autoc/accr parameterization (passed from driving model)
 
 ! Local variables and parameters:
  logical, save                  :: is_init = .false.
- character(len=1024), parameter :: version_p3                    = '5.5.0-rc9+dev-RPNA_changes'
+ character(len=1024), parameter :: version_p3                    = '5.5.0-rc10'
  character(len=1024), parameter :: version_intended_table_1_2mom = '6.9-2momI'
  character(len=1024), parameter :: version_intended_table_1_3mom = '6.9-3momI'
  character(len=1024), parameter :: version_intended_table_2      = '6.2'
@@ -216,8 +217,11 @@
 ! = 1 Seifert and Beheng 2001
 ! = 2 Khairoutdinov and Kogan 2000
 ! = 3 Kogan 2013
- autoAccr_param = 2
- if (present(p3_autoAccr_param)) autoAccr_param = p3_autoAccr_param
+ if (present(autoAccr_param_in)) then
+    autoAccr_param = autoAccr_param_in
+ else
+   autoAccr_param = 2
+ endif
 
 ! parameters for Seifert and Beheng (2001) autoconversion/accretion
  kc     = 9.44e+9
@@ -1177,7 +1181,7 @@ END subroutine p3_init
  real, intent(in)                       :: dt_max                ! maximum timestep for microphysics   s
  real, intent(in)                       :: clbfact_dep           ! calibration factor for deposition
  real, intent(in)                       :: clbfact_sub           ! calibration factor for sublimation
- real, intent(in)                       :: supidth               ! Ice supersaturation threshold for deposition
+ real, intent(in)                       :: supidth               ! ice supersaturation threshold for deposition
 
  real, intent(inout), dimension(ni,nk)  :: qc                    ! cloud specific ratio, mass            kg kg-1
  real, intent(inout), dimension(ni,nk)  :: nc                    ! cloud specific ratio, number          #  kg-1
@@ -1535,7 +1539,7 @@ END subroutine p3_init
                    diag_vis2  = diag_vis2,                                                      &
                    diag_vis3  = diag_vis3,                                                      &
                    diag_dhmax = diag_dhmax,                                                     &
-                   supidth    = supidth)
+                   supi_nuc_in = supidth)
 
 
       if (global_status /= STATUS_OK) return
@@ -1950,7 +1954,7 @@ END subroutine p3_init
                     clbfact_sub,debug_on,scpf_on,scpf_pfrac,scpf_resfact,SCF_out,         &
                     log_3momentIce,log_LiquidFrac,nccnst_in,prt_drzl,prt_rain,prt_crys,   &
                     prt_snow,prt_grpl,prt_pell,prt_hail,prt_sndp,prt_wsnow,qi_type,       &
-                    diag_vis,diag_vis1,diag_vis2,diag_vis3,diag_dhmax,supidth,timer,      &
+                    diag_vis,diag_vis1,diag_vis2,diag_vis3,diag_dhmax,supi_nuc_in,timer,  &
                     timer_description)
 
 !----------------------------------------------------------------------------------------!
@@ -2026,7 +2030,7 @@ END subroutine p3_init
  character(len=*), intent(in)                         :: model          ! driving model
 
  real, intent(in),  optional                          :: nccnst_in     ! 1-mom cloud concentration     # m-3
- real, intent(in),  optional                          :: supidth       ! ice supersat threshold for deposition ice nucleation
+ real, intent(in),  optional                          :: supi_nuc_in   ! ice supersat threshold for deposition nucleation
 
  real, intent(out), dimension(its:ite), optional      :: prt_drzl      ! precip rate, drizzle          m s-1
  real, intent(out), dimension(its:ite), optional      :: prt_rain      ! precip rate, rain             m s-1
@@ -2442,8 +2446,11 @@ call cpu_time(timer_start(1))
  f1pr22    = -99.  !to avoid uninialized variable (in case of accidental use)
  f1pr23    = -99.
 
- supi_nuc  = 0.05
- if (present(supidth)) supi_nuc = supidth
+ if (present(supi_nuc_in)) then
+    supi_nuc = supi_nuc_in   !passed in from driving model
+ else
+    supi_nuc  = 0.05
+ endif
 
  tmparr1 = (pres*1.e-5)**(rd*i_cp)
  i_exn  = 1./tmparr1         !inverse of Exner function array
@@ -2644,7 +2651,7 @@ call cpu_time(timer_start(3))
  k_loop_main_processes: do k = kbot,ktop,kdir
   do i = its,ite
 
-    log_hydrometeorsPresent = qc(i,k)*iSCF(i,k).ge.qsmall .or. qr(i,k).ge.qsmall .or.              &
+    log_hydrometeorsPresent = qc(i,k)*iSCF(i,k).ge.qsmall .or. qr(i,k).ge.qsmall .or.    &
                               maxval(qitot(i,k,:)).ge.qsmall
 
     log_nucleationPossible = ( ((t(i,k).lt.trplpt .and. supi(i,k).ge.-0.05) .or.         &
@@ -2731,8 +2738,8 @@ call cpu_time(timer_start(3))
 
 !----------------------------------------------------------------------
 
-       log_hydrometeorsPresent = qc(i,k)*iSCF(i,k).ge.qsmall .or. qr(i,k).ge.qsmall .or.           &
-                                 maxval(qitot(i,k,:)).ge.qsmall
+       log_hydrometeorsPresent = qc(i,k)*iSCF(i,k).ge.qsmall .or. qr(i,k).ge.qsmall      &
+                                 .or. maxval(qitot(i,k,:)).ge.qsmall
 
        growth_decay_processes: if (log_hydrometeorsPresent) then
        ! if no hydrometeors present, skip growth/decay processes (for existing hydrometeors)
@@ -2953,7 +2960,7 @@ call cpu_time(timer_start(3))
    ! eci is a constant, rho(i,k) is grid-mean, nitot*iSCF is in-cloud
    ! (qc*iSCF*nitot*iSCF)*SCF = (qc*nitot)*iSCF to obtain grid-mean qccol
 
-             if (qitot(i,k,iice).ge.qsmall .and. qc(i,k)*iSCF(i,k).ge.qsmall .and.         &
+             if (qitot(i,k,iice).ge.qsmall .and. qc(i,k)*iSCF(i,k).ge.qsmall .and.       &
                  t(i,k).le.trplpt) then
                 tmp1 = eci*rho(i,k)*iSCF(i,k)
                 qccol(iice) = rhofaci(i,k)*f1pr04*qc(i,k)*nitot(i,k,iice)*tmp1
@@ -2983,7 +2990,7 @@ call cpu_time(timer_start(3))
              liqfrac_1: if (log_LiquidFrac) then
 
              ! assume cloud water is collected by qiliq
-                if (qitot(i,k,iice).ge.qsmall .and. qc(i,k)*iSCF(i,k).ge.qsmall .and.      &
+                if (qitot(i,k,iice).ge.qsmall .and. qc(i,k)*iSCF(i,k).ge.qsmall .and.    &
                     t(i,k).gt.trplpt) then
                    tmp1 = eci*rho(i,k)*iSCF(i,k)
                    qccoll(iice) = rhofaci(i,k)*f1pr04*qc(i,k)*nitot(i,k,iice)*tmp1
@@ -3007,7 +3014,7 @@ call cpu_time(timer_start(3))
              else  ! liqfrac_1
 
              ! assume cloud water is collected and shed as rain drops (original code)
-                if (qitot(i,k,iice).ge.qsmall .and. qc(i,k)*iSCF(i,k).ge.qsmall .and.              &
+                if (qitot(i,k,iice).ge.qsmall .and. qc(i,k)*iSCF(i,k).ge.qsmall .and.    &
                     t(i,k).gt.trplpt) then
                 ! sink for cloud water mass and number, note qcshed is source for rain mass
                    tmp1 = eci*rho(i,k)*nitot(i,k,iice)*iSCF(i,k)
@@ -3957,8 +3964,8 @@ call cpu_time(timer_start(3))
        dumqvs = qv_sat(t(i,k),pres(i,k),0)
        qcon_satadj = (Qv_cld(i,k)-dumqvs)/(1.+xxlv(i,k)**2*dumqvs/(cp*rv*t(i,k)**2))*    &
                      i_dt*SCF(i,k)
-       qevp_satadj  =((Qv_cld(i,k)-dumqvs)*(SPF(i,k)-SPF_clr(i,k))+(Qv_clr(i,k)-dumqvs)*         &
-                     SPF_clr(i,k))/(1.+xxlv(i,k)**2*dumqvs/(cp*rv*t(i,k)**2))*i_dt 
+       qevp_satadj  =((Qv_cld(i,k)-dumqvs)*(SPF(i,k)-SPF_clr(i,k))+(Qv_clr(i,k)-dumqvs)* &
+                     SPF_clr(i,k))/(1.+xxlv(i,k)**2*dumqvs/(cp*rv*t(i,k)**2))*i_dt
 
        tmp1 = qccon+qrcon+qcnuc+sum(qlcon)
        if (tmp1>0. .and. qcon_satadj<0.) then
@@ -3977,13 +3984,13 @@ call cpu_time(timer_start(3))
           qlcon = qlcon*ratio
        endif
 
-       tmp2 = qcevp+qrevp+sum(qlevp) 
-       if (tmp2>0. .and. qevp_satadj>0.) then 
-          qcevp = 0. 
+       tmp2 = qcevp+qrevp+sum(qlevp)
+       if (tmp2>0. .and. qevp_satadj>0.) then
+          qcevp = 0.
           nrevp = 0.
           qlevp = 0.
           nlevp = 0.
-       elseif (tmp2.gt.0. .and. tmp2.gt.-qevp_satadj) then 
+       elseif (tmp2.gt.0. .and. tmp2.gt.-qevp_satadj) then
              ratio = max(0.,-qevp_satadj)/(qcevp+qrevp+sum(qlevp))
              ratio = min(1.,ratio)
              qcevp = qcevp*ratio
@@ -4622,7 +4629,7 @@ call cpu_time(timer_end(6))
  k_loop_fz:  do k = kbot,ktop,kdir
   do i = its,ite
 
-    freezing_possible: if ( (qc(i,k)*iSCF(i,k).ge.qsmall .or. qr(i,k).ge.qsmall) .and.             &
+    freezing_possible: if ( (qc(i,k)*iSCF(i,k).ge.qsmall .or. qr(i,k).ge.qsmall) .and.   &
                             t(i,k).lt.233.15 ) then
 
        multicat1: if (nCat>1) then
@@ -4702,7 +4709,7 @@ call cpu_time(timer_end(6))
              !determine destination ice-phase category:
              dum1  = 900.     !density of new ice
              D_new = ((Q_nuc*6.)/(pi*dum1*N_nuc))**thrd
-             call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,         &
+             call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,       &
                                      deltaD_init,iice_dest)
              if (global_status /= STATUS_OK) return
           else
