@@ -37,9 +37,6 @@ MODULE p3_plugin
   IMPLICIT NONE
   PRIVATE
 
-  CHARACTER(*), PARAMETER :: icon_namelist_name = 'NAMELIST_NWP'
-  CHARACTER(*), PARAMETER :: lookup_file_dir = '/home/hk-project-aci/nw5893/ICON/p3-microphysics-5.4-icon/lookup_tables'
-
   INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
   TYPE(t_comin_setup_version_info)        :: version
   TYPE(t_comin_descrdata_global), POINTER :: p_global
@@ -54,10 +51,10 @@ MODULE p3_plugin
   INTEGER        :: rank, fastphystep, i_icecat, n_icecat, ihydrometeor_ini
   REAL           :: dtime
   CHARACTER(20)  :: icecat_name, unit_name
-  CHARACTER(999) :: tracer_ini_filename
+  CHARACTER(999) :: tracer_ini_filename, lookup_tables_path
   LOGICAL        :: l3mom_ice, lliqfrac, ltracer_turb
 
-  NAMELIST /p3_nml/ n_icecat, l3mom_ice, lliqfrac, ihydrometeor_ini, tracer_ini_filename
+  NAMELIST /p3_nml/ n_icecat, l3mom_ice, lliqfrac, ihydrometeor_ini, tracer_ini_filename, lookup_tables_path
 
 CONTAINS
 
@@ -65,9 +62,10 @@ CONTAINS
   ! ComIn primary constructor
   ! --------------------------------------------------------------------
   SUBROUTINE comin_main()  BIND(C)
-
     TYPE(t_comin_plugin_info) :: this_plugin
     INTEGER                   :: funit
+    CHARACTER(*), PARAMETER   :: icon_namelist_name = 'NAMELIST_NWP'
+
 
     rank = comin_parallel_get_host_mpi_rank()
 
@@ -304,7 +302,7 @@ CONTAINS
 
     IF (rank == 0) WRITE (0,*) 'call p3_init'
 
-    CALL p3_init(lookup_file_dir, n_icecat, l3mom_ice, lliqfrac, model, stat, abort_on_err, dowr)
+    CALL p3_init(TRIM(lookup_tables_path), n_icecat, l3mom_ice, lliqfrac, model, stat, abort_on_err, dowr)
     IF (stat /= status_ok) CALL comin_plugin_finish('call_p3_init (p3_plugin)', 'failed!')
 
 
