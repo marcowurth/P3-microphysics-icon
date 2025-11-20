@@ -45,6 +45,8 @@ MODULE p3_plugin
 
   TYPE :: t_dyn_vars_3dptr
     REAL(wp), POINTER, DIMENSION(:,:,:) :: hfl, dz, temp, rho, pres, exner, theta_old, ddt_temp_phys, w_hl
+  CONTAINS
+    PROCEDURE :: nullify => nullify_dyn_vars_3dptr
   END type t_dyn_vars_3dptr
 
   TYPE :: t_mp_vars_handle
@@ -61,6 +63,8 @@ MODULE p3_plugin
     REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp_rate, rain_gsp_rate, snow_gsp_rate
     REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp
     REAL(wp), POINTER, DIMENSION(:,:,:) :: q_sedim, twater
+  CONTAINS
+    PROCEDURE :: nullify => nullify_mp_vars_3dptr
   END type t_mp_vars_3dptr
 
   TYPE :: t_p3_vars_handle
@@ -69,6 +73,8 @@ MODULE p3_plugin
 
   TYPE :: t_p3_vars_3dptr
     REAL(wp), POINTER, DIMENSION(:,:,:) :: dmean_i, deff_i, rho_i, vm_i
+  CONTAINS
+    PROCEDURE :: nullify => nullify_p3_vars_3dptr
   END type t_p3_vars_3dptr
 
   TYPE :: t_icon_tracer_handle
@@ -77,6 +83,8 @@ MODULE p3_plugin
 
   TYPE :: t_icon_tracer_3dptr
     REAL(wp), POINTER, DIMENSION(:,:,:) :: qv, qv_old, qc, qi, qr, qs, qnc, qnr
+  CONTAINS
+    PROCEDURE :: nullify => nullify_icon_tracer_3dptr
   END type t_icon_tracer_3dptr
 
   TYPE :: t_p3_tracer_handle
@@ -85,6 +93,8 @@ MODULE p3_plugin
 
   TYPE :: t_p3_tracer_3dptr
     REAL(wp), POINTER, DIMENSION(:,:,:) :: qitot, qnitot, qirim, birim, qzitot, qiliq
+  CONTAINS
+    PROCEDURE :: nullify => nullify_p3_tracer_3dptr
   END type t_p3_tracer_3dptr
 
   TYPE(t_dyn_vars_handle)               :: dyn_vars
@@ -102,6 +112,35 @@ MODULE p3_plugin
   NAMELIST /p3_nml/ n_icecat, l3mom_ice, lliqfrac, ihydrometeor_ini, tracer_ini_filename
 
 CONTAINS
+
+  SUBROUTINE nullify_dyn_vars_3dptr(this)
+    CLASS(t_dyn_vars_3dptr), INTENT(inout) :: this
+    NULLIFY(this%hfl, this%dz, this%temp, this%rho, this%pres, this%exner, this%theta_old, this%ddt_temp_phys, this%w_hl)
+  END SUBROUTINE nullify_dyn_vars_3dptr
+
+  SUBROUTINE nullify_mp_vars_3dptr(this)
+    CLASS(t_mp_vars_3dptr), INTENT(inout) :: this
+    NULLIFY(this%dmean_c, this%dmean_r, this%deff_c, this%deff_i, this%reff_qc, this%reff_qi)
+    NULLIFY(this%dhmax, this%dhmax_ground, this%ze_p3)
+    NULLIFY(this%prec_gsp_rate, this%rain_gsp_rate, this%snow_gsp_rate)
+    NULLIFY(this%prec_gsp, this%prec_gsp_d, this%rain_gsp, this%snow_gsp)
+    NULLIFY(this%q_sedim, this%twater)
+  END SUBROUTINE nullify_mp_vars_3dptr
+
+  SUBROUTINE nullify_p3_vars_3dptr(this)
+    CLASS(t_p3_vars_3dptr), INTENT(inout) :: this
+    NULLIFY(this%dmean_i, this%deff_i, this%rho_i, this%vm_i)
+  END SUBROUTINE nullify_p3_vars_3dptr
+
+  SUBROUTINE nullify_icon_tracer_3dptr(this)
+    CLASS(t_icon_tracer_3dptr), INTENT(inout) :: this
+    NULLIFY(this%qv, this%qv_old, this%qc, this%qi, this%qr, this%qs, this%qnc, this%qnr)
+  END SUBROUTINE nullify_icon_tracer_3dptr
+
+  SUBROUTINE nullify_p3_tracer_3dptr(this)
+    CLASS(t_p3_tracer_3dptr), INTENT(inout) :: this
+    NULLIFY(this%qitot, this%qnitot, this%qirim, this%birim, this%qzitot, this%qiliq)
+  END SUBROUTINE nullify_p3_tracer_3dptr
 
   ! --------------------------------------------------------------------
   ! ComIn primary constructor
@@ -350,8 +389,8 @@ CONTAINS
     IF (stat /= status_ok) CALL comin_plugin_finish('call_p3_init (p3_plugin)', 'failed!')
 
 
-    IF (ihydrometeor_ini == 2) THEN
-      IF (rank == 0) WRITE (0,*) 'initialize from graupel scheme ice tracers qi, qs, qg'
+    IF (ihydrometeor_ini == 1) THEN
+      IF (rank == 0) WRITE (0,*) 'initialize from 1M-scheme mass ice tracers qi, qs, qg'
 
       dmean_qc    = 15.e-6   ! number-mean diameter in m
       dmean_qr    = 600e-6   ! number-mean diameter in m (P3's internal upper limit is 1/inv_Drmax=2mm)
@@ -451,7 +490,7 @@ CONTAINS
               ENDIF
             END DO
 
-          CASE (2)
+          CASE (1)
             ! initialization of warm phase:
             ! qv, qc, qr were already loaded and set in initicon
 
@@ -460,7 +499,7 @@ CONTAINS
             ! dmean_qc = (qc / (qnc*rhow*3.14))**(1./3.)
 
             ! initialization of cold phase:
-            ! 2: initialize from graupel scheme data (qi, qs, qg)
+            ! 1: initialize from 1M-scheme mass tracers (qi, qs, qg)
             ! if n_icecat == 1: init only cloud ice qi and ignore precipitating types qs, qg
             ! if n_icecat == 2: use the first icecat for qi and the second icecat for merged qs + qg
             ! if n_icecat >= 3: use one icecat for qi, qs, qg each
@@ -570,6 +609,12 @@ CONTAINS
 !!$OMP END DO
 !!$OMP END PARALLEL
 
+    CALL dyn_vars_3d%nullify()
+    CALL icon_tracer_3d%nullify()
+    DO i_icecat = 1, n_icecat
+      CALL p3_tracer_3d(i_icecat)%nullify()
+    END DO
+
   END SUBROUTINE call_p3_init
 
 
@@ -652,6 +697,13 @@ CONTAINS
 !!$OMP END DO
 !!$OMP END PARALLEL
 
+    CALL icon_tracer_3d%nullify()
+    CALL icon_tracer_ddt_turb_3d%nullify()
+    DO i_icecat = 1, n_icecat
+      CALL p3_tracer_3d(i_icecat)%nullify()
+      CALL p3_tracer_ddt_turb_3d(i_icecat)%nullify()
+    END DO
+
   END SUBROUTINE update_turb_tend
 
 
@@ -671,6 +723,8 @@ CONTAINS
 
     mp_vars_3d%reff_qc = mp_vars_3d%deff_c / 2.
     mp_vars_3d%reff_qi = mp_vars_3d%deff_i / 2.
+
+    CALL mp_vars_3d%nullify()
 
   END SUBROUTINE set_reff_before_rad
 
@@ -731,6 +785,10 @@ CONTAINS
 !!$OMP END DO
 !!$OMP END PARALLEL
 
+    CALL icon_tracer_3d%nullify()
+    DO i_icecat = 1, n_icecat
+      CALL p3_tracer_3d(i_icecat)%nullify()
+    END DO
 
   END SUBROUTINE update_ice_after_nudging
 
@@ -1086,6 +1144,14 @@ CONTAINS
     ! clean up
     DEALLOCATE(diag_2d, diag_3d)
 
+    CALL dyn_vars_3d%nullify()
+    CALL mp_vars_3d%nullify()
+    CALL icon_tracer_3d%nullify()
+    DO i_icecat = 1, n_icecat
+      CALL p3_vars_3d(i_icecat)%nullify()
+      CALL p3_tracer_3d(i_icecat)%nullify()
+    END DO
+
     !IF (rank == 0) WRITE (0,*) 'end of run_custom_microphysics'
 
   END SUBROUTINE run_custom_microphysics
@@ -1150,7 +1216,7 @@ CONTAINS
   SUBROUTINE create_tracer(var_name, unit_name, ltracer_turb)
     CHARACTER(*), INTENT(IN) :: var_name, unit_name
     LOGICAL, INTENT(IN)      :: ltracer_turb
-    IF (rank == 0) WRITE (0,*) 'in comin_main, creating tracer: ', TRIM(var_name)
+
     CALL comin_var_request_add_wrapper(descriptor=t_comin_var_descriptor(name=TRIM(var_name), id=-1), &
       &                                units=TRIM(unit_name), lmode_exclusive=.FALSE., zaxis_id=COMIN_ZAXIS_3D, &
                                        ltracer=.TRUE., lrestart=.FALSE., ltracer_turb=ltracer_turb)
