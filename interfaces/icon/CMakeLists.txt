@@ -19,6 +19,7 @@ find_package(NetCDF REQUIRED COMPONENTS Fortran)
 find_package(ComIn REQUIRED)
 
 add_library(${PROJECT_NAME} MODULE p3_plugin.F90)
+add_library(p3_plugin_types SHARED p3_plugin_types.F90)
 add_library(microphy_p3 SHARED microphy_p3.F90)
 
 
@@ -39,4 +40,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC NetCDF::NetCDF_Fortran)
 # compile the plugin with OpenMP for hybrid OpenMP-MPI parallelization:
 #target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_Fortran)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE microphy_p3 ComIn::ComIn)
+target_link_libraries(p3_plugin_types PRIVATE ComIn::ComIn)
+target_link_libraries(${PROJECT_NAME} PRIVATE p3_plugin_types microphy_p3 ComIn::ComIn)
