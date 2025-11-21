@@ -27,7 +27,7 @@
 !    https://github.com/P3-microphysics/P3-microphysics                                    !
 !__________________________________________________________________________________________!
 !                                                                                          !
-! Version:       5.5.0-rc10                                                                !
+! Version:       5.5.0-rc10 +                                                              !
 ! Last updated:  2025 Nov                                                                  !
 !__________________________________________________________________________________________!
 
@@ -155,7 +155,7 @@
 
 ! Local variables and parameters:
  logical, save                  :: is_init = .false.
- character(len=1024), parameter :: version_p3                    = '5.5.0-rc10'
+ character(len=1024), parameter :: version_p3                    = '5.5.0-rc10+'
  character(len=1024), parameter :: version_intended_table_1_2mom = '6.9-2momI'
  character(len=1024), parameter :: version_intended_table_1_3mom = '6.9-3momI'
  character(len=1024), parameter :: version_intended_table_2      = '6.2'
@@ -10940,9 +10940,8 @@ else
  real, intent(in) :: mu_max  !maximum allowable value of mu
 
 ! Local variables:
+ double precision :: G,g2,x1,x2,x3
  real             :: mu      !shape parameter in gamma distribution
- double precision :: G       !function of mu (see comments above)
- double precision :: g2,x1,x2,x3
  real, parameter  :: eps_m3 = 1.e-20
 
  real :: dum,c1,c2,c3,Q,R,aa,bb
@@ -10952,29 +10951,29 @@ else
     !G = (mom0*mom6)/(mom3**2)
     !To avoid very small values of mom3**2 (not enough),
     !reformulated as: G = (mom0/mom3)*(mom6/mom3)
-     x1 = 1./mom3
-     x2 = mom0*x1
-     x3 = mom6*x1
+     x1 = dble(1./mom3)
+     x2 = dble(mom0)*x1
+     x3 = dble(mom6)*x1
      G  = x2*x3
 
 !Piecewise-polynomial approximation of G(mu) to solve for mu:
-     if (G>=20.) then
+     if (G>=20.d0) then
         mu = 0.
      else
-        g2 = G**2
-        if (G<20.  .and.G>=13.31) then
-           mu = 3.3638e-3*g2 - 1.7152e-1*G + 2.0857e+0
-        elseif (G<13.31.and.G>=7.123) then
-           mu = 1.5900e-2*g2 - 4.8202e-1*G + 4.0108e+0
-        elseif (G<7.123.and.G>=4.200) then
-           mu = 1.0730e-1*g2 - 1.7481e+0*G + 8.4246e+0
-        elseif (G<4.200.and.G>=2.946) then
-           mu = 5.9070e-1*g2 - 5.7918e+0*G + 1.6919e+1
-        elseif (G<2.946.and.G>=1.793) then
-           mu = 4.3966e+0*g2 - 2.6659e+1*G + 4.5477e+1
-        elseif (G<1.793.and.G>=1.472) then
-           mu = 4.7552e+1*g2 - 1.7958e+2*G + 1.8126e+2
-        elseif (G<1.472) then
+        g2 = G*G
+        if (G<20.d0  .and. G>=13.31d0) then
+           mu = 3.3638e-3*sngl(g2) - 1.7152e-1*sngl(G) + 2.0857e+0
+        elseif (G<13.31d0 .and. G>=7.123d0) then
+           mu = 1.5900e-2*sngl(g2) - 4.8202e-1*sngl(G) + 4.0108e+0
+        elseif (G<7.123d0 .and. G>=4.200d0) then
+           mu = 1.0730e-1*sngl(g2) - 1.7481e+0*sngl(G) + 8.4246e+0
+        elseif (G<4.200d0 .and. G>=2.946d0) then
+           mu = 5.9070e-1*sngl(g2) - 5.7918e+0*sngl(G) + 1.6919e+1
+        elseif (G<2.946d0 .and. G>=1.793d0) then
+           mu = 4.3966e+0*sngl(g2) - 2.6659e+1*sngl(G) + 4.5477e+1
+        elseif (G<1.793d0 .and. G>=1.472d0) then
+           mu = 4.7552e+1*sngl(g2) - 1.7958e+2*sngl(G) + 1.8126e+2
+        elseif (G<1.472d0) then
            mu = mu_max
         endif
      endif
@@ -11022,33 +11021,32 @@ else
  real, intent(in) :: mu_max  !maximum allowable value of mu
 
 ! local:
- real             :: mu      !shape parameter in gamma distribution
- double precision :: G       !function of mu (see comments above)
- double precision :: g2,x1,x2,x3
+ double precision :: G,g2,x1,x2,x3
+ real             :: mu,dum,c1,c2,c3,Q,R,aa,bb
  real, parameter  :: eps_m3 = 1.e-20
-
- real :: dum,c1,c2,c3,Q,R,aa,bb
+ real, parameter  :: inv_9  = 1./9.
+ real, parameter  :: inv_54 = 1./54.
 
  if (mom3>eps_m3) then
 
     !G = (mom0*mom6)/(mom3**2)
     !To avoid very small values of mom3**2 (not enough),
     !reformulated as: G = (mom0/mom3)*(mom6/mom3)
-     x1 = 1./mom3
-     x2 = mom0*x1
-     x3 = mom6*x1
+     x1 = dble(1./mom3)
+     x2 = dble(mom0)*x1
+     x3 = dble(mom6)*x1
      G  = x2*x3
 
      ! set minimum on G, below this the analytic solution breaks down
-     G = max(1.3, G)
+     G = max(1.3d0, G)
 
     !analytic cubic root solution:
-     dum = 1./(1.-G)
-     c1  = (15.-6.*G)*dum
-     c2  = (74.-11.*G)*dum
-     c3  = (120.-6.*G)*dum
-     Q   = (c1**2-3.*c2)/9.
-     R   = (2.*c1**3-9.*c1*c2+27.*c3)/54.
+     dum = 1./(1.-sngl(G))
+     c1  = (15.-6.*sngl(G))*dum
+     c2  = (74.-11.*sngl(G))*dum
+     c3  = (120.-6.*sngl(G))*dum
+     Q   = (c1**2-3.*c2)*inv_9
+     R   = (2.*c1**3-9.*c1*c2+27.*c3)*inv_54
 
      ! NOTE: R is always < 0, thus we take the following:
 
