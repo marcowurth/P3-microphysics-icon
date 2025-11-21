@@ -1,11 +1,7 @@
 
-MODULE p3_plugin
+MODULE p3plugin
   !USE omp_lib
   USE mpi
-  USE netcdf,                  ONLY : nf90_open, nf90_close, nf90_inq_dimid, nf90_inquire,              &
-    &                                 nf90_inq_varid, nf90_inquire_variable, nf90_inquire_dimension,    &
-    &                                 nf90_get_var, NF90_FLOAT, NF90_DOUBLE,                            &
-    &                                 NF90_NOWRITE, NF90_NOERR, NF90_MAX_VAR_DIMS
 
   USE comin_plugin_interface,  ONLY : comin_callback_register, comin_var_request_add,                   &
     &                                 comin_var_get, t_comin_var_descriptor, t_comin_var_handle,        &
@@ -26,33 +22,27 @@ MODULE p3_plugin
     &                                 comin_metadata_get, comin_descrdata_get_timesteplength,           &
     &                                 comin_descrdata_get_cell_indices
 
-  USE p3_plugin_types,         ONLY : t_dyn_vars_handle, t_dyn_vars_3dptr,                              &
-    &                                 t_mp_vars_handle, t_mp_vars_3dptr,                                &
-    &                                 t_p3_vars_handle, t_p3_vars_3dptr,                                &
-    &                                 t_icon_tracer_handle, t_icon_tracer_3dptr,                        &
-    &                                 t_p3_tracer_handle, t_p3_tracer_3dptr
+  USE p3plugin_types,          ONLY : t_dyn_vars_3dptr, t_mp_vars_3dptr, t_p3_vars_3dptr,               &
+    &                                 t_icon_tracer_3dptr, t_p3_tracer_3dptr
 
-  USE microphy_p3,             ONLY : p3_init, p3_main, status_ok
+  USE p3plugin_global_vars,    ONLY : n_icecat, ihydrometeor_ini, l3mom_ice, lliqfrac,                  &
+    &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,       &
+    &                                 dyn_vars, mp_vars, p3_vars,                                       &
+    &                                 icon_tracer, icon_tracer_ddt_turb, p3_tracer, p3_tracer_ddt_turb
+
+  USE p3plugin_tracer_init,    ONLY : init_p3_and_tracer
+
+  USE microphy_p3,             ONLY : p3_main
 
   IMPLICIT NONE
   PRIVATE
 
   INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
-  TYPE(t_comin_setup_version_info)        :: version
-  TYPE(t_comin_descrdata_global), POINTER :: p_global
-  TYPE(t_comin_descrdata_domain), POINTER :: p_patch
 
-  TYPE(t_dyn_vars_handle)               :: dyn_vars
-  TYPE(t_mp_vars_handle)                :: mp_vars
-  TYPE(t_p3_vars_handle), ALLOCATABLE   :: p3_vars(:)
-  TYPE(t_icon_tracer_handle)            :: icon_tracer, icon_tracer_ddt_turb
-  TYPE(t_p3_tracer_handle), ALLOCATABLE :: p3_tracer(:), p3_tracer_ddt_turb(:)
-
-  INTEGER        :: rank, fastphystep, i_icecat, n_icecat, ihydrometeor_ini
+  INTEGER        :: rank, i_icecat, fastphystep
   REAL           :: dtime
   CHARACTER(20)  :: icecat_name, unit_name
-  CHARACTER(999) :: tracer_ini_filename, lookup_tables_path
-  LOGICAL        :: l3mom_ice, lliqfrac, ltracer_turb
+  LOGICAL        :: ltracer_turb
 
   NAMELIST /p3_nml/ n_icecat, l3mom_ice, lliqfrac, ihydrometeor_ini, tracer_ini_filename, lookup_tables_path
 
@@ -62,16 +52,16 @@ CONTAINS
   ! ComIn primary constructor
   ! --------------------------------------------------------------------
   SUBROUTINE comin_main()  BIND(C)
-    TYPE(t_comin_plugin_info) :: this_plugin
-    INTEGER                   :: funit
-    CHARACTER(*), PARAMETER   :: icon_namelist_name = 'NAMELIST_NWP'
-
+    TYPE(t_comin_setup_version_info) :: version
+    TYPE(t_comin_plugin_info)        :: this_plugin
+    INTEGER                          :: funit
+    CHARACTER(*), PARAMETER          :: icon_namelist_name = 'NAMELIST_NWP'
 
     rank = comin_parallel_get_host_mpi_rank()
 
     version = comin_setup_get_version()
     IF (version%version_no_major > 1)  THEN
-      CALL comin_plugin_finish('comin_main (p3_plugin)', 'incompatible version!')
+      CALL comin_plugin_finish('comin_main (p3plugin)', 'incompatible version!')
     END IF
 
     ! print plugin id
@@ -172,7 +162,7 @@ CONTAINS
 
     ! register callbacks
     CALL comin_callback_register(EP_SECONDARY_CONSTRUCTOR, secondary_constructor)
-    CALL comin_callback_register(EP_ATM_INIT_FINALIZE, call_p3_init)
+    CALL comin_callback_register(EP_ATM_INIT_FINALIZE, init_p3_and_tracer)
     !CALL comin_callback_register(EP_ATM_TURBULENCE_AFTER, update_turb_tend)
     CALL comin_callback_register(EP_ATM_MICROPHYSICS_BEFORE, run_custom_microphysics)
     !CALL comin_callback_register(EP_ATM_RADIATION_BEFORE, set_reff_before_rad)
@@ -274,265 +264,6 @@ CONTAINS
     END DO
 
   END SUBROUTINE secondary_constructor
-
-
-  ! ------------------------------------------------------------------------
-  ! Call p3_init to load lookup tables etc. and then initialize P3 tracers
-  ! ------------------------------------------------------------------------
-  SUBROUTINE call_p3_init()  BIND(C)
-
-    CHARACTER(16) :: model        = 'ICON'
-    CHARACTER(30) :: varname      = ''
-    LOGICAL       :: abort_on_err = .TRUE.
-    LOGICAL       :: dowr         = .FALSE.
-    INTEGER       :: stat
-    INTEGER       :: jg, jb, jk, jc, jglobal
-    INTEGER       :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
-    REAL          :: hfl_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks)
-    REAL          :: qs_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks)
-    REAL          :: qg_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks)
-    REAL          :: dmean_qc, dmean_qr, dmean_qi, dmean_qs, dmean_qg
-    REAL          :: magicfac_qi, magicfac_qs, magicfac_qg
-    REAL          :: rhow, rhop_qi, rhop_qs, rhop_qg, rhor_qs, rhor_qg
-    REAL          :: frim_qs, frim_qg
-
-    TYPE(t_dyn_vars_3dptr)    :: dyn_vars_3d
-    TYPE(t_icon_tracer_3dptr) :: icon_tracer_3d
-    TYPE(t_p3_tracer_3dptr)   :: p3_tracer_3d(n_icecat)
-
-    IF (rank == 0) WRITE (0,*) 'call p3_init'
-
-    CALL p3_init(TRIM(lookup_tables_path), n_icecat, l3mom_ice, lliqfrac, model, stat, abort_on_err, dowr)
-    IF (stat /= status_ok) CALL comin_plugin_finish('call_p3_init (p3_plugin)', 'failed!')
-
-
-    IF (ihydrometeor_ini == 1) THEN
-      IF (rank == 0) WRITE (0,*) 'initialize from 1M-scheme mass ice tracers qi, qs, qg'
-
-      dmean_qc    = 15.e-6   ! number-mean diameter in m
-      dmean_qr    = 600e-6   ! number-mean diameter in m (P3's internal upper limit is 1/inv_Drmax=2mm)
-      rhow        = 1000.    ! density of liquid water in kg/m3
-
-      dmean_qi    = 150.e-6  ! target number-mean diameter in m
-      magicfac_qi = 17.      ! empirically estimated correction factor needed because ice is not spherical, not dense
-      rhop_qi     = 917.     ! bulk density of whole cloud ice particle in kg/m3
-
-      dmean_qs    = 2000.e-6  ! target number-mean diameter in m
-      magicfac_qs = 208.      ! empirically estimated correction factor needed because ice is not spherical, not dense
-      rhop_qs     = 200.      ! bulk density of whole snow particle in kg/m3
-      rhor_qs     = 500.      ! bulk density of rimed ice part in kg/m3
-      frim_qs     = 0.1       ! bulk rime mass fraction
-
-      dmean_qg    = 1200.e-6  ! target number-mean diameter in m
-      magicfac_qg = 15.3      ! empirically estimated correction factor needed because ice is not spherical, not dense
-      rhop_qg     = 500.      ! bulk density of whole graupel particle in kg/m3
-      rhor_qg     = 500.      ! bulk density of rimed ice part in kg/m3
-      frim_qg     = 0.9       ! bulk rime mass fraction
-
-      CALL dyn_vars%hfl%to_3d(dyn_vars_3d%hfl)
-      hfl_3dpatch = dyn_vars_3d%hfl
-      CALL read_vinterp_ini_var(tracer_ini_filename, 'QS', hfl_3dpatch, qs_ini_3dpatch)
-      CALL read_vinterp_ini_var(tracer_ini_filename, 'QG', hfl_3dpatch, qg_ini_3dpatch)
-    ENDIF
-
-    !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of ' // TRIM(varname)
-    !IF (rank == 0) WRITE (0,'(a,F10.5,F10.5)') 'min max:', minval(qc_ini_3d(:,120)), maxval(qc_ini_3d(:,120))
-
-
-    !IF (rank == 0) WRITE (0,*) 'set initial qnc & qnr to zero'
-    !IF (rank == 0) WRITE (0,*) 'set initial qitot_1 to read in qi values, other qitot_x to zero'
-    !IF (rank == 0) WRITE (0,*) 'set initial qnitot_x, qirim_x, birim_x, qzitot_x, qiliq_x all to zero'
-
-    CALL icon_tracer%qv%to_3d(icon_tracer_3d%qv)
-    CALL icon_tracer%qc%to_3d(icon_tracer_3d%qc)
-    CALL icon_tracer%qnc%to_3d(icon_tracer_3d%qnc)
-    CALL icon_tracer%qr%to_3d(icon_tracer_3d%qr)
-    CALL icon_tracer%qnr%to_3d(icon_tracer_3d%qnr)
-    CALL icon_tracer%qi%to_3d(icon_tracer_3d%qi)
-    CALL icon_tracer%qs%to_3d(icon_tracer_3d%qs)
-
-    DO i_icecat = 1, n_icecat
-      CALL p3_tracer(i_icecat)%qitot%to_3d(p3_tracer_3d(i_icecat)%qitot)
-      CALL p3_tracer(i_icecat)%qnitot%to_3d(p3_tracer_3d(i_icecat)%qnitot)
-      CALL p3_tracer(i_icecat)%qirim%to_3d(p3_tracer_3d(i_icecat)%qirim)
-      CALL p3_tracer(i_icecat)%birim%to_3d(p3_tracer_3d(i_icecat)%birim)
-      IF (l3mom_ice) THEN
-        CALL p3_tracer(i_icecat)%qzitot%to_3d(p3_tracer_3d(i_icecat)%qzitot)
-      ENDIF
-      IF (lliqfrac) THEN
-        CALL p3_tracer(i_icecat)%qiliq%to_3d(p3_tracer_3d(i_icecat)%qiliq)
-      ENDIF
-    END DO
-
-    jg = 1
-    rl_start = p_global%grf_bdywidth_c + 1
-    rl_end   = p_global%min_rlcell_int
-
-    i_startblk = p_patch%cells%start_block(rl_start)
-    i_endblk   = p_patch%cells%end_block(rl_end)
-
-!!$OMP PARALLEL PRIVATE(jb,i_startidx,i_endidx,jk,jc,i_icecat)
-!!$OMP DO SCHEDULE(STATIC, 1)
-
-    DO jb = i_startblk, i_endblk
-      CALL comin_descrdata_get_cell_indices(jg, jb, i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end)
-      DO jk = 1, p_patch%nlev
-        DO jc = i_startidx, i_endidx
-
-          SELECT CASE (ihydrometeor_ini)
-          CASE (0)
-            ! initialization of warm phase:
-            ! qv, qc, qr were already loaded and set in initicon if in ini file, therefore reset qc, qr to zero
-
-            icon_tracer_3d%qc(jc,jk,jb) = 0.0
-            icon_tracer_3d%qr(jc,jk,jb) = 0.0
-            icon_tracer_3d%qnc(jc,jk,jb) = 0.0
-            icon_tracer_3d%qnr(jc,jk,jb) = 0.0
-
-            ! initialization of cold phase:
-
-            icon_tracer_3d%qi(jc,jk,jb) = 0.0
-            icon_tracer_3d%qs(jc,jk,jb) = 0.0
-
-            DO i_icecat = 1, n_icecat
-              p3_tracer_3d(i_icecat)%qitot(jc,jk,jb) = 0.0
-              p3_tracer_3d(i_icecat)%qnitot(jc,jk,jb) = 0.0
-              p3_tracer_3d(i_icecat)%qirim(jc,jk,jb) = 0.0
-              p3_tracer_3d(i_icecat)%birim(jc,jk,jb) = 0.0
-              IF (l3mom_ice) THEN
-                p3_tracer_3d(i_icecat)%qzitot(jc,jk,jb) = 0.0
-              ENDIF
-              IF (lliqfrac) THEN
-                p3_tracer_3d(i_icecat)%qiliq(jc,jk,jb) = 0.0
-              ENDIF
-            END DO
-
-          CASE (1)
-            ! initialization of warm phase:
-            ! qv, qc, qr were already loaded and set in initicon
-
-            icon_tracer_3d%qnc(jc,jk,jb) = icon_tracer_3d%qc(jc,jk,jb) / (rhow*3.14) * dmean_qc**-3
-            icon_tracer_3d%qnr(jc,jk,jb) = icon_tracer_3d%qr(jc,jk,jb) / (rhow*3.14) * dmean_qr**-3
-            ! dmean_qc = (qc / (qnc*rhow*3.14))**(1./3.)
-
-            ! initialization of cold phase:
-            ! 1: initialize from 1M-scheme mass tracers (qi, qs, qg)
-            ! if n_icecat == 1: init only cloud ice qi and ignore precipitating types qs, qg
-            ! if n_icecat == 2: use the first icecat for qi and the second icecat for merged qs + qg
-            ! if n_icecat >= 3: use one icecat for qi, qs, qg each
-            ! all other icecats (if more available) are kept empty
-
-            IF (n_icecat == 1) THEN
-              p3_tracer_3d(1)%qitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb)
-              p3_tracer_3d(1)%qnitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb) / (rhop_qi*3.14) &
-                &                                               * magicfac_qi * dmean_qi**-3
-              p3_tracer_3d(1)%qirim(jc,jk,jb) = 0.0
-              p3_tracer_3d(1)%birim(jc,jk,jb) = 0.0
-              IF (l3mom_ice) THEN
-                p3_tracer_3d(1)%qzitot(jc,jk,jb) = 0.0
-              ENDIF
-              IF (lliqfrac) THEN
-                p3_tracer_3d(1)%qiliq(jc,jk,jb) = 0.0
-              ENDIF
-
-            ELSE
-              ! cloud ice, assume no riming part present
-              p3_tracer_3d(1)%qitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb)
-              p3_tracer_3d(1)%qnitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb) / (rhop_qi*3.14) &
-                &                                               * magicfac_qi * dmean_qi**-3
-              p3_tracer_3d(1)%qirim(jc,jk,jb) = 0.0
-              p3_tracer_3d(1)%birim(jc,jk,jb) = 0.0
-              IF (l3mom_ice) THEN
-                p3_tracer_3d(1)%qzitot(jc,jk,jb) = 0.0
-              ENDIF
-              IF (lliqfrac) THEN
-                p3_tracer_3d(1)%qiliq(jc,jk,jb) = 0.0
-              ENDIF
-
-              ! precipitating ice, use two separate icecats if available, merge into one if not
-              IF (n_icecat == 2) THEN
-                p3_tracer_3d(2)%qitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) + qg_ini_3dpatch(jc,jk,jb)
-                p3_tracer_3d(2)%qnitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) / (rhop_qs*3.14)  &
-                  &                                * magicfac_qs * dmean_qs**-3               &
-                  &                              + qg_ini_3dpatch(jc,jk,jb) / (rhop_qg*3.14)  &
-                  &                                * magicfac_qg * dmean_qg**-3
-                p3_tracer_3d(2)%qirim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs  &
-                  &                             + qg_ini_3dpatch(jc,jk,jb) * frim_qg
-                p3_tracer_3d(2)%birim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs / rhor_qs  &
-                  &                             + qg_ini_3dpatch(jc,jk,jb) * frim_qg / rhor_qg
-                IF (l3mom_ice) THEN
-                  p3_tracer_3d(2)%qzitot(jc,jk,jb) = 0.0
-                ENDIF
-                IF (lliqfrac) THEN
-                  p3_tracer_3d(2)%qiliq(jc,jk,jb) = 0.0
-                ENDIF
-
-              ELSE
-                p3_tracer_3d(2)%qitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb)
-                p3_tracer_3d(2)%qnitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) / (rhop_qs*3.14) &
-                  &                                * magicfac_qs * dmean_qs**-3
-                p3_tracer_3d(2)%qirim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs
-                p3_tracer_3d(2)%birim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs / rhor_qs
-                IF (l3mom_ice) THEN
-                  p3_tracer_3d(2)%qzitot(jc,jk,jb) = 0.0
-                ENDIF
-                IF (lliqfrac) THEN
-                  p3_tracer_3d(2)%qiliq(jc,jk,jb) = 0.0
-                ENDIF
-
-                p3_tracer_3d(3)%qitot(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb)
-                p3_tracer_3d(3)%qnitot(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb) / (rhop_qg*3.14) &
-                  &                                * magicfac_qg * dmean_qg**-3
-                p3_tracer_3d(3)%qirim(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb) * frim_qg
-                p3_tracer_3d(3)%birim(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb) * frim_qg / rhor_qg
-                IF (l3mom_ice) THEN
-                  p3_tracer_3d(3)%qzitot(jc,jk,jb) = 0.0
-                ENDIF
-                IF (lliqfrac) THEN
-                  p3_tracer_3d(3)%qiliq(jc,jk,jb) = 0.0
-                ENDIF
-              ENDIF
-
-              IF (n_icecat > 3) THEN
-                DO i_icecat = 4, n_icecat
-                  p3_tracer_3d(i_icecat)%qitot(jc,jk,jb) = 0.0
-                  p3_tracer_3d(i_icecat)%qnitot(jc,jk,jb) = 0.0
-                  p3_tracer_3d(i_icecat)%qirim(jc,jk,jb) = 0.0
-                  p3_tracer_3d(i_icecat)%birim(jc,jk,jb) = 0.0
-                  IF (l3mom_ice) THEN
-                    p3_tracer_3d(i_icecat)%qzitot(jc,jk,jb) = 0.0
-                  ENDIF
-                  IF (lliqfrac) THEN
-                    p3_tracer_3d(i_icecat)%qiliq(jc,jk,jb) = 0.0
-                  ENDIF
-                END DO
-              ENDIF
-
-            ENDIF
-
-          END SELECT
-
-          ! set qs to zero and re-sum all qitot into qi
-          icon_tracer_3d%qs(jc,jk,jb) = 0.0
-          icon_tracer_3d%qi(jc,jk,jb) = 0.0
-          DO i_icecat = 1, n_icecat
-            icon_tracer_3d%qi(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb) + p3_tracer_3d(i_icecat)%qitot(jc,jk,jb)
-          END DO
-
-        END DO
-      END DO
-    END DO
-
-!!$OMP END DO
-!!$OMP END PARALLEL
-
-    CALL dyn_vars_3d%nullify()
-    CALL icon_tracer_3d%nullify()
-    DO i_icecat = 1, n_icecat
-      CALL p3_tracer_3d(i_icecat)%nullify()
-    END DO
-
-  END SUBROUTINE call_p3_init
 
 
   ! --------------------------------------------------------------------
@@ -1000,7 +731,7 @@ CONTAINS
     icon_tracer_3d%qnr = qnr_3d
 
     ! update thermodynamic vars
-    ! updates to theta_v and temp_v are done in ICON after this call to p3_plugin
+    ! updates to theta_v and temp_v are done in ICON after this call to p3plugin
     dyn_vars_3d%temp = theta_3d * dyn_vars_3d%exner
     dyn_vars_3d%theta_old = theta_old_3d
     icon_tracer_3d%qv = qv_3d
@@ -1101,7 +832,7 @@ CONTAINS
     comm = comin_parallel_get_plugin_mpi_comm()
 
     CALL MPI_REDUCE(local_max, global_max, 1, MPI_REAL, MPI_MAX, root, comm, ierr)
-    IF (ierr /= 0) CALL comin_plugin_finish('print_global_max (p3_plugin)', 'failed!')
+    IF (ierr /= 0) CALL comin_plugin_finish('print_global_max (p3plugin)', 'failed!')
 
     !IF (rank == root) WRITE(0,*) 'local_max('//var_name//')', local_max
     IF (rank == root) WRITE(0,*) 'global_max('//var_name//')', global_max
@@ -1183,234 +914,4 @@ CONTAINS
     END IF
   END SUBROUTINE comin_var_request_add_wrapper
 
-
-  SUBROUTINE read_vinterp_ini_var(filename, varname, hfl_3dpatch_outlevs, var_3dpatch_outlevs)
-    CHARACTER(*), INTENT(IN) :: filename, varname
-    REAL, INTENT(IN)         :: hfl_3dpatch_outlevs(:, :, :)
-    REAL, INTENT(OUT)        :: var_3dpatch_outlevs(:, :, :)
-
-    CHARACTER(30)            :: varname_dummy, dimname
-    INTEGER                  :: nc_status, ncid, ncells_global, nlev_in !, nDimensions, nVariables, nAttributes
-    INTEGER                  :: i, varid, hhlid, xtype, ndims, natts, dimpos_time, dimpos_ncells, dimid_ncells
-    INTEGER                  :: dimids(NF90_MAX_VAR_DIMS), dimlen(NF90_MAX_VAR_DIMS)
-    INTEGER                  :: jg, jb, jk, jc, jglobal
-    INTEGER                  :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
-    REAL, ALLOCATABLE        :: varvalues_file_2d(:, :), hhlvalues_file_2d(:, :), varvalues_file_3d(:, :, :)
-    REAL, ALLOCATABLE        :: var_global_inlevs(:, :), hhl_global_inlevs(:, :), hfl_1d_inlevs(:)
-
-    rank = comin_parallel_get_host_mpi_rank()
-    !IF (rank == 0) WRITE (0,'(a)') 'read from filename: ', TRIM(filename)
-
-    ncid = -99
-    nc_status = nf90_open(TRIM(filename), NF90_NOWRITE, ncid)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', 'Could not read ini file: ' // TRIM(filename))
-
-    ! read ncells of ini file and check if equals to icon model's ncells_global
-    nc_status = nf90_inq_dimid(ncid, 'ncells', dimid_ncells)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                               & 'Could not find dimension ncells in ini file!')
-    nc_status = nf90_inquire_dimension(ncid, dimid_ncells, dimname, ncells_global)
-    IF (ncells_global /= p_patch%cells%ncells_global) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                               & 'ncells number of ini file does not match with model!')
-
-    ! read in variable varname and handle dimensions
-    !nc_status = nf90_inquire(ncid, nDimensions, nVariables, nAttributes)
-    nc_status = nf90_inq_varid(ncid, varname, varid)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                               & 'Could not find variable "' // TRIM(varname) // '" in ini file: ' // TRIM(filename))
-
-    nc_status = nf90_inquire_variable(ncid, varid, varname_dummy, xtype, ndims, dimids, natts)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                               & 'Could not inquire variable: ' // TRIM(varname))
-    IF (xtype /= NF90_DOUBLE .and. xtype /= NF90_FLOAT) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                               & 'Variable type not double or float: ' // TRIM(varname))
-
-    SELECT CASE (ndims)
-    CASE (1)
-      CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                             & 'Variable has only one dimension: ' // TRIM(varname))
-    CASE (2)
-      dimpos_ncells = 0
-      DO i = 1, 2
-        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-        !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
-        IF (TRIM(dimname) == 'time') THEN
-          CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                                 & 'Found dimension "time" in 2d array: ' // TRIM(varname))
-        ELSE IF (TRIM(dimname) == 'ncells') THEN
-          dimpos_ncells = i
-        ELSE
-          nlev_in = dimlen(i)
-        ENDIF
-      END DO
-
-      IF (dimpos_ncells == 0) &
-        & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                                 & 'Could not find dimension "ncells" in:' // TRIM(varname))
-
-      ALLOCATE(var_global_inlevs(ncells_global, nlev_in))
-      ALLOCATE(varvalues_file_2d(dimlen(1), dimlen(2)))
-      nc_status = nf90_get_var(ncid, varid, varvalues_file_2d)
-      !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of ' // TRIM(varname)
-      !IF (rank == 0) WRITE (0,'(a,F10.5,F10.5)') 'min max:', minval(varvalues_file_2d), maxval(varvalues_file_2d)
-
-      SELECT CASE (dimpos_ncells)
-      CASE (1)
-        var_global_inlevs(:, :) = varvalues_file_2d(:, :)
-      CASE (2)
-        var_global_inlevs(:, :) = transpose(varvalues_file_2d(:, :))
-      END SELECT
-
-    CASE (3)
-      dimpos_time = 0
-      dimpos_ncells = 0
-      DO i = 1, 3
-        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-        !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
-        IF (TRIM(dimname) == 'time') THEN
-          dimpos_time = i
-          IF (dimlen(i) > 1) THEN
-            IF (rank == 0) WRITE (0,'(a)') 'Dimension "time" has more than one time step, choosing the first'
-          ENDIF
-        ELSE IF (TRIM(dimname) == 'ncells') THEN
-          dimpos_ncells = i
-        ELSE
-          nlev_in = dimlen(i)
-        ENDIF
-      END DO
-
-      IF (dimpos_time == 0) &
-        & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                                 & 'Could not find dimension "time" in:' // TRIM(varname))
-      IF (dimpos_ncells == 0) &
-        & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                                 & 'Could not find dimension "ncells" in:' // TRIM(varname))
-
-      ALLOCATE(var_global_inlevs(ncells_global, nlev_in))
-      ALLOCATE(varvalues_file_3d(dimlen(1), dimlen(2), dimlen(3)))
-      nc_status = nf90_get_var(ncid, varid, varvalues_file_3d)
-      !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of ' // TRIM(varname)
-      !IF (rank == 0) WRITE (0,'(a,F10.5,F10.5)') 'min max:', minval(varvalues_file_3d), maxval(varvalues_file_3d)
-
-      SELECT CASE (dimpos_time)
-      CASE (1)
-        IF (dimpos_ncells == 2) THEN
-          var_global_inlevs(:, :) = varvalues_file_3d(1, :, :)
-        ELSE
-          var_global_inlevs(:, :) = transpose(varvalues_file_3d(1, :, :))
-        ENDIF
-      CASE (2)
-        IF (dimpos_ncells == 1) THEN
-          var_global_inlevs(:, :) = varvalues_file_3d(:, 1, :)
-        ELSE
-          var_global_inlevs(:, :) = transpose(varvalues_file_3d(:, 1, :))
-        ENDIF
-      CASE (3)
-        IF (dimpos_ncells == 1) THEN
-          var_global_inlevs(:, :) = varvalues_file_3d(:, :, 1)
-        ELSE
-          var_global_inlevs(:, :) = transpose(varvalues_file_3d(:, :, 1))
-        ENDIF
-      END SELECT
-
-    CASE (4:)
-      CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                             & 'Variable has more than 3 dimensions: ' // TRIM(varname))
-    END SELECT
-    ! end of reading variable
-
-
-    ! read in hhl of ini file
-    nc_status = nf90_inq_varid(ncid, 'HHL', hhlid)
-    IF (nc_status /= NF90_NOERR) &
-      & nc_status = nf90_inq_varid(ncid, 'hhl', hhlid)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', &
-                               & 'Could not find hhl in ini file: ' // TRIM(filename))
-
-    nc_status = nf90_inquire_variable(ncid, hhlid, varname_dummy, xtype, ndims, dimids, natts)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', 'Could not inquire hhl!')
-    IF (xtype /= NF90_DOUBLE .and. xtype /= NF90_FLOAT) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', 'hhl type not double or float!')
-    IF (ndims /= 2) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', 'hhl does not have 2 dimensions!')
-    dimpos_ncells = 0
-    DO i = 1, 2
-      nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-      !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
-      IF (TRIM(dimname) == 'ncells') dimpos_ncells = i
-    END DO
-    IF (dimpos_ncells == 0) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', 'Could not find dimension "ncells" in hhl!')
-
-    ALLOCATE(hhl_global_inlevs(ncells_global, nlev_in+1))
-    ALLOCATE(hhlvalues_file_2d(dimlen(1), dimlen(2)))
-    nc_status = nf90_get_var(ncid, hhlid, hhlvalues_file_2d)
-    !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of hhl'
-
-    SELECT CASE (dimpos_ncells)
-    CASE (1)
-      hhl_global_inlevs(:, :) = hhlvalues_file_2d(:, :)
-    CASE (2)
-      hhl_global_inlevs(:, :) = transpose(hhlvalues_file_2d(:, :))
-    END SELECT
-
-    nc_status = nf90_close(ncid)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3_plugin)', 'File closing not successful!')
-
-    ! vertical interpolate from inlevs to model outlevs
-    ALLOCATE(hfl_1d_inlevs(nlev_in))
-    jg = 1
-    rl_start = p_global%grf_bdywidth_c + 1
-    rl_end   = p_global%min_rlcell_int
-
-    i_startblk = p_patch%cells%start_block(rl_start)
-    i_endblk   = p_patch%cells%end_block(rl_end)
-
-    DO jb = i_startblk, i_endblk
-      CALL comin_descrdata_get_cell_indices(jg, jb, i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end)
-      DO jc = i_startidx, i_endidx
-        jglobal = p_patch%cells%glb_index((jb-1)*p_global%nproma+jc)
-        hfl_1d_inlevs(:) = (hhl_global_inlevs(jglobal, 1:nlev_in) + hhl_global_inlevs(jglobal, 2:nlev_in+1)) / 2.
-
-        CALL vert_intp_linear_1d(hfl_1d_inlevs(:),                var_global_inlevs(jglobal, :), &
-                               & hfl_3dpatch_outlevs(jc, :, jb),  var_3dpatch_outlevs(jc, :, jb))
-      END DO
-    END DO
-
-  END SUBROUTINE read_vinterp_ini_var
-
-
-  ! linear vertical interpolation: height levels za -> zb
-  ! extrapolates if no data given for zb > za
-  ! taken from mo_nh_vert_interp_les:vert_intp_linear_1d (there taken from UCLA-LES)
-  SUBROUTINE vert_intp_linear_1d(za, xa, zb, xb)
-     REAL, INTENT(IN)  :: za(:), zb(:), xa(:)
-     REAL, INTENT(OUT) :: xb(:)
-     REAL              :: wt
-     INTEGER           :: l, k
-
-     l = SIZE(za)
-     DO k = SIZE(zb), 1, -1
-       IF (zb(k) <= za(1)) THEN
-          DO WHILE ( zb(k) > za(l-1) .AND. l > 1)
-             l = l-1
-          END DO
-          wt=(zb(k)-za(l))/(za(l-1)-za(l))
-          xb(k)=xa(l)+(xa(l-1)-xa(l))*wt
-       ELSE
-          wt=(zb(k)-za(1))/(za(2)-za(1))
-          xb(k)=xa(1)+(xa(2)-xa(1))*wt
-       END IF
-    END DO
-  END SUBROUTINE vert_intp_linear_1d
-
-END MODULE p3_plugin
+END MODULE p3plugin

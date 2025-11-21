@@ -1,5 +1,5 @@
 
-MODULE p3_plugin_types
+MODULE p3plugin_types
   USE comin_plugin_interface,  ONLY : t_comin_var_handle
 
   IMPLICIT NONE
@@ -104,4 +104,4 @@ CONTAINS
     NULLIFY(this%qitot, this%qnitot, this%qirim, this%birim, this%qzitot, this%qiliq)
   END SUBROUTINE nullify_p3_tracer_3dptr
 
-END MODULE p3_plugin_types
+END MODULE p3plugin_types
