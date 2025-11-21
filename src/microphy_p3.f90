@@ -27,7 +27,7 @@
 !    https://github.com/P3-microphysics/P3-microphysics                                    !
 !__________________________________________________________________________________________!
 !                                                                                          !
-! Version:       5.5.0-rc10 +                                                              !
+! Version:       5.5.0-rc11                                                                !
 ! Last updated:  2025 Nov                                                                  !
 !__________________________________________________________________________________________!
 
@@ -155,7 +155,7 @@
 
 ! Local variables and parameters:
  logical, save                  :: is_init = .false.
- character(len=1024), parameter :: version_p3                    = '5.5.0-rc10+'
+ character(len=1024), parameter :: version_p3                    = '5.5.0-rc11'
  character(len=1024), parameter :: version_intended_table_1_2mom = '6.9-2momI'
  character(len=1024), parameter :: version_intended_table_1_3mom = '6.9-3momI'
  character(len=1024), parameter :: version_intended_table_2      = '6.2'
@@ -2165,7 +2165,7 @@ END subroutine p3_init
                    rimefrac_over_rhorime,arr_lami,arr_mui,rimedensity
 
  real, dimension(its:ite,kts:kte) :: i_dzq,i_rho,ze_ice,ze_rain,prec,acn,rho,rhofacr,    &
-            rhofaci,xxls,xxlv,xlf,qvs,qvi,sup,supi,vtrmi1,tmparr1,mflux_r,mflux_i,i_exn, &
+            rhofaci,xxls,xxlv,xlf,qvs,qvi,sup,supi,vtrmi1,tmparr1,massflux_r,i_exn,      &
             SCF,iSCF,SPF,iSPF,SPF_clr,Qv_cld,Qv_clr
 
  real, dimension(kts:kte) :: V_qr,V_qit,V_nit,V_nr,V_qc,V_nc,V_zit,flux_qit,flux_qx,     &
@@ -2417,34 +2417,34 @@ call cpu_time(timer_start(1))
 ! note: '1./max(30.,dt)' = '1.*min(1./30., 1./dt)'
  timeScaleFactor = min(1./120., i_dt)
 
- prt_liq   = 0.
- prt_sol   = 0.
- prt_soli  = 0.
- mflux_r   = 0.
- mflux_i   = 0.
- prec      = 0.
- mu_r      = 0.
- diag_ze   = -99.        !not used; avoids possible uninialized value
- ze_ice    = 6.2946e-29  !m^3 m-6; corresponds to -99 dbZ (for zero hydrometeors)
- ze_rain   = 6.2946e-29  !m^3 m-6; corresponds to -99 dbZ (for zero hydrometeors)
- diam_ice  = 0.
- liq_frac  = 0.
+ prt_liq    = 0.
+ prt_sol    = 0.
+ prt_soli   = 0.
+ massflux_r = 0.
+!massflux_i = 0.
+ prec       = 0.
+ mu_r       = 0.
+ diag_ze    = -99.        !not used; avoids possible uninialized value
+ ze_ice     = 6.2946e-29  !m^3 m-6; corresponds to -99 dbZ (for zero hydrometeors)
+ ze_rain    = 6.2946e-29  !m^3 m-6; corresponds to -99 dbZ (for zero hydrometeors)
+ diam_ice   = 0.
+ liq_frac   = 0.
  rime_frac  = 0.
  rimefrac_over_rhorime = 0.
  rimedensity = 0.
- diag_effc = 10.e-6 ! default value
-!diag_effr = 25.e-6 ! default value
- diag_effi = 25.e-6 ! default value
- diag_vmi  = 0.
- diag_di   = 0.
- diag_rhoi = 0.
+ diag_effc  = 10.e-6 ! default value
+!diag_effr  = 25.e-6 ! default value
+ diag_effi  = 25.e-6 ! default value
+ diag_vmi   = 0.
+ diag_di    = 0.
+ diag_rhoi  = 0.
  if (present(diag_dhmax)) diag_dhmax = 0.
- diag_2d   = 0.
- diag_3d   = 0.
- rhorime_c = 400.
-!rhorime_r = 400.
- f1pr22    = -99.  !to avoid uninialized variable (in case of accidental use)
- f1pr23    = -99.
+ diag_2d    = 0.
+ diag_3d    = 0.
+ rhorime_c  = 400.
+!rhorime_r  = 400.
+ f1pr22     = -99.  !to avoid uninialized variable (in case of accidental use)
+ f1pr23     = -99.
 
  if (present(supi_nuc_in)) then
     supi_nuc = supi_nuc_in   !passed in from driving model
@@ -4557,7 +4557,8 @@ call cpu_time(timer_start(6))
 ! Rain:
     if (maxval(qr(i,:)) .ge. qsmall)                                                     &
        call sedimentation_liquid(qr(i,:),nr(i,:),2,iSPF(i,:),prt_liq(i),rho(i,:),        &
-                       i_rho(i,:),i_dzq(i,:),dt,ktop,kbot,kdir,rhofacr=rhofacr(i,:))
+                       i_rho(i,:),i_dzq(i,:),dt,ktop,kbot,kdir,rhofacr=rhofacr(i,:),     &
+                       massflux=massflux_r(i,:))
 
 ! Ice:
     log_tmp1 = maxval(qitot(i,:,:)) .ge. qsmall
@@ -5301,47 +5302,59 @@ call cpu_time(timer_start(9))
  endif compute_type_diags
 
 
- diag_visibility: if (present(diag_vis) .and. log_outputStep) then
-   !it is assumed that all diag_vis{x} will either be present or all not present
+ diag_visibility: if (present(diag_vis)  .and. present(diag_vis1) .and.                  &
+                      present(diag_vis1) .and. present(diag_vis2)) then
 
-    diag_vis(:,:)  = 3.*maxVIS
-    diag_vis1(:,:) = 3.*maxVIS
-    diag_vis2(:,:) = 3.*maxVIS
-    diag_vis3(:,:) = 3.*maxVIS
+    if (log_outputStep) then
 
-    do k = kbot,ktop,kdir
-     do i = its,ite
+       do k = kbot,ktop,kdir
+        do i = its,ite
 
-          !VIS1:  component through liquid cloud (fog); based on Gultepe and Milbrandt, 2007)
-          tmp1 = qc(i,k)*rho(i,k)*1.e+3    !LWC [g m-3]
-          tmp2 = nc(i,k)*rho(i,k)*1.e-6    !Nc  [cm-3]
-          if (tmp1>0.005 .and. tmp2>1.) then
-             diag_vis1(i,k)= max(minVIS,1000.*(1.13*(tmp1*tmp2)**(-0.51))) !based on FRAM [GM2007, eqn (4)
-            !diag_vis1(i,k)= max(minVIS,min(maxVIS, (tmp1*tmp2)**(-0.65))) !based on RACE [GM2007, eqn (3)
-          endif
+             !VIS1:  component through liquid cloud (fog); based on Gultepe and Milbrandt, 2007)
+             tmp1 = qc(i,k)*rho(i,k)*1.e+3    !LWC [g m-3]
+             tmp2 = nc(i,k)*rho(i,k)*1.e-6    !Nc  [cm-3]
+             if (tmp1>0.005 .and. tmp2>1.) then
+                diag_vis1(i,k) = max(minVIS,1000.*(1.13*(tmp1*tmp2)**(-0.51)))  !based on GM2007, eqn (4)
+             else
+                diag_vis1(i,k) = maxVIS
+             endif
 
-         !VIS2: component through rain;  based on Gultepe and Milbrandt, 2008, Table 2 eqn (1)
-          tmp1 = mflux_r(i,k)*i_rhow*3.6e+6                                    !rain rate [mm h-1]
-          if (tmp1>0.01) then
-             diag_vis2(i,k)= max(minVIS,1000.*(-4.12*tmp1**0.176+9.01))   ![m]
-          endif
+            !VIS2: component through rain;  based on Gultepe and Milbrandt, 2008, Table 2 eqn (1)
+             tmp1 = massflux_r(i,k)*i_rhow*3.6e+6                               !rain rate [mm h-1]
+             if (tmp1>0.01) then
+                diag_vis2(i,k) = max(10.,1000.*(-4.12*tmp1**0.176+9.01))   ![m]
+             else
+                diag_vis2(i,k) = maxVIS
+             endif
 
-         !VIS3: component through snow;  based on Gultepe and Milbrandt, 2008, Table 2 eqn (6)
-          tmp1 = mflux_i(i,k)*i_rhow*3.6e+6                                    !snow rate, liq-eq [mm h-1]
-          if (tmp1>0.01) then
-             diag_vis3(i,k)= max(minVIS,1000.*(1.10*tmp1**(-0.701)))      ![m]
-          endif
+            !VIS3: component through snow;  based on Gultepe and Milbrandt, 2008, Table 2 eqn (6)
+            !      - for nCat=1 only (to simplify and reduce cost; for operational use in HRDPS)
+             tmp1 = diag_vmi(i,k,1)*qitot(i,k,1)*rho(i,k)*i_rhow*3.6e+6     !solid precip rate, liq-eq [mm h-1]
+             if (tmp1>0.01) then
+                diag_vis3(i,k) = max(minVIS,1000.*(1.10*tmp1**(-0.701)))      ![m]
+             else
+                diag_vis3(i,k) = maxVIS
+             endif
 
-          !VIS:  visibility due to reduction from all components 1, 2, and 3
-          !      (based on sum of extinction coefficients and Koschmieders's Law)
-          diag_vis(i,k) = min(maxVIS, 1./(1./diag_vis1(i,k) + 1./diag_vis2(i,k) +        &
-                                          1./diag_vis3(i,k)))
-          diag_vis1(i,k)= min(maxVIS, diag_vis1(i,k))
-          diag_vis2(i,k)= min(maxVIS, diag_vis2(i,k))
-          diag_vis3(i,k)= min(maxVIS, diag_vis3(i,k))
+             !VIS:  visibility due to reduction from all components 1, 2, and 3
+             !      (based on sum of extinction coefficients and Koschmieders's Law)
+             diag_vis(i,k) = min(maxVIS, 1./(1./diag_vis1(i,k) + 1./diag_vis2(i,k) +     &
+                                             1./diag_vis3(i,k)))
+             diag_vis1(i,k)= min(maxVIS, diag_vis1(i,k))
+             diag_vis2(i,k)= min(maxVIS, diag_vis2(i,k))
+             diag_vis3(i,k)= min(maxVIS, diag_vis3(i,k))
 
-     enddo !i loop
-    enddo !k loop
+        enddo !i loop
+       enddo !k loop
+
+    else
+
+       diag_vis(:,:)  = maxVIS
+       diag_vis1(:,:) = maxVIS
+       diag_vis2(:,:) = maxVIS
+       diag_vis3(:,:) = maxVIS
+
+    endif  !log_outputStep
 
  endif diag_visibility
 
@@ -11643,7 +11656,7 @@ else
 
 !======================================================================================!
  subroutine sedimentation_liquid(qx,nx,liq_type,iSxF,prt_liq,rho,i_rho,i_dz,dt,ktop,     &
-                                 kbot,kdir,acn,dnu,rhofacr)
+                                 kbot,kdir,acn,dnu,rhofacr,massflux)
 
  !----------------------------------------------------------------------
  ! Perform full sedimentation step for mass and number of cloud or rain
@@ -11652,20 +11665,22 @@ else
  implicit none
 
 !arguments:
- real, intent(inout), dimension(:)        :: qx,nx
- real, intent(inout)                      :: prt_liq
- real, intent(in)                         :: dt
- real, intent(in), dimension(:)           :: rho,i_rho,i_dz,iSxF
- real, intent(in), dimension(:), optional :: acn,rhofacr
- real, intent(in), dimension(:), optional :: dnu
- integer, intent(in)                      :: liq_type,ktop,kbot,kdir
+ real, intent(inout), dimension(:)         :: qx,nx
+ real, intent(inout)                       :: prt_liq
+ real, intent(in)                          :: dt
+ real, intent(in),  dimension(:)           :: rho,i_rho,i_dz,iSxF
+ real, intent(in),  dimension(:), optional :: acn,rhofacr
+ real, intent(in),  dimension(:), optional :: dnu
+ real, intent(out), dimension(:), optional :: massflux
+ integer, intent(in)                       :: liq_type,ktop,kbot,kdir
 
 !local variables:
  real, dimension(size(qx)) :: V_qx,V_nx,flux_qx,flux_nx
- real                :: dt_left,dt_sub,prt_accum,Co_max,mu_c,dum,lamc,mu_r,lamr,rdumii,  &
-                        rdumjj,dum1,dum2,dum3,i_dum3,tmp1
- integer             :: nk,k,k_qxtop,k_qxbot,k_temp,tmpint1,dumii,dumjj
- logical             :: log_qxpresent
+ real                      :: dt_left,dt_sub,prt_accum,Co_max,mu_c,dum,lamc,mu_r,lamr,   &
+                              rdumii,rdumjj,dum1,dum2,dum3,i_dum3,tmp1
+ integer                   :: nk,k,k_qxtop,k_qxbot,k_temp,tmpint1,dumii,dumjj
+ logical                   :: log_qxpresent
+
 
  call find_top(k_qxtop,log_qxpresent,qx(:)*iSxF(:),ktop,kbot,kdir)
 
@@ -11732,10 +11747,11 @@ else
 
        !-- calculate fluxes
        do k = k_temp,k_qxtop,kdir
-          flux_qx(k) = V_qx(k)*qx(k)*rho(k)
-          flux_nx(k) = V_nx(k)*nx(k)*rho(k)
-!           mflux_r(i,k) = flux_qx(k)  !store mass flux for use in visibility diagnostic)
+          flux_qx(k)  = V_qx(k)*qx(k)*rho(k)
+          flux_nx(k)  = V_nx(k)*nx(k)*rho(k)
        enddo
+
+       if (present(massflux)) massflux = flux_qx  !store mass flux for use in visibility diagnostic (for rain)
 
        !accumulated precip during time step
        prt_accum = prt_accum + flux_qx(kbot)*dt_sub*merge(1., 0., k_qxbot==kbot)
@@ -11759,6 +11775,10 @@ else
     enddo substep_sedi_r
 
     prt_liq = prt_liq + prt_accum*i_rhow/dt
+
+ else
+
+    massflux(:) = 0.
 
  endif qx_present
 
