@@ -7,7 +7,7 @@
 ! Subsequent major and minor upgrades have been ongoing.                                   !
 !                                                                                          !
 ! For model-specific aspects/versions, see comments in the interface subroutine(s) in      !
-!   this module (mp_p3_wrapper_wrf, mp_p3_wrapper_gem).                                    !
+!   this module (mp_p3_wrapper_wrfcm1, mp_p3_wrapper_gem).                                 !
 !                                                                                          !
 ! For details see:                                                                         !
 !   Morrison and Milbrandt (2015) [J. Atmos. Sci., 72, 287-311]    - original scheme desc. !
@@ -27,7 +27,7 @@
 !    https://github.com/P3-microphysics/P3-microphysics                                    !
 !__________________________________________________________________________________________!
 !                                                                                          !
-! Version:       5.5.0-rc11                                                                !
+! Version:       5.5.0-rc12                                                                !
 ! Last updated:  2025 Nov                                                                  !
 !__________________________________________________________________________________________!
 
@@ -155,7 +155,7 @@
 
 ! Local variables and parameters:
  logical, save                  :: is_init = .false.
- character(len=1024), parameter :: version_p3                    = '5.5.0-rc11'
+ character(len=1024), parameter :: version_p3                    = '5.5.0-rc12'
  character(len=1024), parameter :: version_intended_table_1_2mom = '6.9-2momI'
  character(len=1024), parameter :: version_intended_table_1_3mom = '6.9-3momI'
  character(len=1024), parameter :: version_intended_table_2      = '6.2'
@@ -2164,9 +2164,9 @@ END subroutine p3_init
  real, dimension(its:ite,kts:kte,nCat) :: diam_ice,liq_frac,rime_frac,                   &
                    rimefrac_over_rhorime,arr_lami,arr_mui,rimedensity
 
- real, dimension(its:ite,kts:kte) :: i_dzq,i_rho,ze_ice,ze_rain,prec,acn,rho,rhofacr,    &
+ real, dimension(its:ite,kts:kte) :: i_dzq,i_rho,ze_ice,ze_rain,ze_cld,rho,rhofacr,      &
             rhofaci,xxls,xxlv,xlf,qvs,qvi,sup,supi,vtrmi1,tmparr1,massflux_r,i_exn,      &
-            SCF,iSCF,SPF,iSPF,SPF_clr,Qv_cld,Qv_clr
+            SCF,iSCF,SPF,iSPF,SPF_clr,Qv_cld,Qv_clr,prec,acn
 
  real, dimension(kts:kte) :: V_qr,V_qit,V_nit,V_nr,V_qc,V_nc,V_zit,flux_qit,flux_qx,     &
             flux_nx,flux_nit,flux_qir,flux_bir,flux_zit,flux_qil
@@ -2425,8 +2425,10 @@ call cpu_time(timer_start(1))
  prec       = 0.
  mu_r       = 0.
  diag_ze    = -99.        !not used; avoids possible uninialized value
- ze_ice     = 6.2946e-29  !m^3 m-6; corresponds to -99 dbZ (for zero hydrometeors)
- ze_rain    = 6.2946e-29  !m^3 m-6; corresponds to -99 dbZ (for zero hydrometeors)
+ tmp1       = 4.19642e-29  !m^3 m-6; corresponds to -99 dbZ/3 (for zero hydrometeors)
+ ze_ice     = tmp1
+ ze_rain    = tmp1
+ ze_cld     = tmp1
  diam_ice   = 0.
  liq_frac   = 0.
  rime_frac  = 0.
@@ -4870,6 +4872,9 @@ call cpu_time(timer_end(6))
           call get_cloud_dsd2(qc(i,k),nc(i,k),mu_c(i,k),rho(i,k),nu(i,k),dnu,lamc(i,k),  &
                               tmp1,tmp2, iSCF(i,k))
           diag_effc(i,k) = 0.5*(mu_c(i,k)+3.)/lamc(i,k)
+          ze_cld(i,k)    = sngl(dble(rho(i,k)*nc(i,k)*(mu_c(i,k)+6.)*(mu_c(i,k)+5.)*     &
+                           (mu_c(i,k)+4.)*(mu_c(i,k)+3.)*(mu_c(i,k)+2.)*(mu_c(i,k)+1.))/ &
+                           dble(lamc(i,k))**6)
        else
           qv(i,k) = qv(i,k)+qc(i,k)
           th(i,k) = th(i,k)-i_exn(i,k)*qc(i,k)*xxlv(i,k)*i_cp
@@ -4997,7 +5002,7 @@ call cpu_time(timer_end(6))
 
        enddo iice_loop_final_checks_diags
 
-       diag_ze(i,k) = 10.*log10((ze_ice(i,k)+ze_rain(i,k))*1.e+18)  ! convert to dBZ
+       diag_ze(i,k) = 10.*log10((ze_ice(i,k) + ze_rain(i,k) + ze_cld(i,k))*1.e+18)  ! convert to dBZ
 
      ! if qr is very small then set nr to 0 (needs to be done here after call
      ! to ice lookup table because a minimum nr of nsmall will be set otherwise even if qr=0
@@ -5005,7 +5010,6 @@ call cpu_time(timer_end(6))
 
   enddo !i loop
  enddo k_loop_final_checks_diags
-
 
 !     if (debug_on) then
 !        location_ind = 800
@@ -5119,7 +5123,7 @@ call cpu_time(timer_start(9))
 
 !--- diagnostics CM1 and KIN1D only:
  if ((log_outputStep_cm1 .and. trim(model)=='CM1') .or. trim(model)=='KIN1D') then
-    diag_3d(:,:,1) = sum(qitot(:,:,:),dim=3)
+   !diag_3d(:,:,1) = sum(qitot(:,:,:),dim=3)
     do k = ktop,kbot,-kdir
      do i = its,ite
          do iice = 1,nCat
@@ -5135,8 +5139,8 @@ call cpu_time(timer_start(9))
 
  compute_type_diags: if (log_typeDiags .and. (trim(model)=='GEM'.or.trim(model)=='KIN1D')) then
 
-    if (.not.(present(prt_drzl).and.present(prt_rain).and.present(prt_crys).and. &
-              present(prt_snow).and.present(prt_grpl).and.present(prt_pell).and. &
+    if (.not.(present(prt_drzl).and.present(prt_rain).and.present(prt_crys).and.         &
+              present(prt_snow).and.present(prt_grpl).and.present(prt_pell).and.         &
               present(prt_hail).and.present(prt_sndp))) then
        print*,'***  ABORT IN P3_MAIN ***'
        print*,'*  typeDiags_ON = .true. but prt_drzl, etc. are not passed into P3_MAIN'
