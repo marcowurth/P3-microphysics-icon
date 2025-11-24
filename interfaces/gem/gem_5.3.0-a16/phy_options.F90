@@ -273,10 +273,10 @@ module phy_options
    namelist /physics_cfgs_p/ moyhr
 
    !# Switch for p3 parameterization of autoconversion/accretion/self-collection in microphysics (P3) scheme
-   !# 1:Seifert & Beheng 2000, 2:Beheng, 1994, 3:Khairoutdinov & Kogan, 2000, 4:Kogan 2013; (1:recommanded)
-   integer           :: p3_iparam = 3
-   namelist /physics_cfgs/ p3_iparam
-   namelist /physics_cfgs_p/ p3_iparam
+   !# 1:Seifert & Beheng 2000, 2:Khairoutdinov & Kogan, 2000 (default), 3:Kogan 2013; (used in GEM)
+   integer           :: p3_autoAccr_iparam = 3
+   namelist /physics_cfgs/ p3_autoAccr_iparam
+   namelist /physics_cfgs_p/ p3_autoAccr_iparam
 
    !# Number of ice-phase hydrometeor categories to use in the P3 microphysics
    !# scheme (currently limited to <5)
@@ -299,6 +299,11 @@ module phy_options
    real           :: p3_subfact = 1.0
    namelist /physics_cfgs/ p3_subfact
    namelist /physics_cfgs_p/ p3_subfact
+
+   !# Ice supersaturation threshold for deposition ice nucleation(P3)
+   real           :: p3_supid = 0.05
+   namelist /physics_cfgs/ p3_supid
+   namelist /physics_cfgs_p/ p3_supid
 
    !# switch for real-time debugging in microphysics (P3)
    logical         :: p3_debug = .false.
@@ -412,7 +417,8 @@ module phy_options
 
    !# Number of timesteps for which surface fluxes "FC" and "FV" are
    !# gradually set from 0 to their full value in a "slow start fashion"
-   !# at the beginning of a time integration
+   !# at the beginning of a time integration (max 20)
+   integer, parameter :: NSLOFLUXMAX = 20
    integer           :: nsloflux     = 0
    namelist /physics_cfgs/ nsloflux
    namelist /physics_cfgs_p/ nsloflux
@@ -464,7 +470,7 @@ module phy_options
         /)
 
    !# Reference length (m) for variance power law scaling
-   real              :: pbl_dxref = 1000.
+   real              :: pbl_dxref = -1.
    namelist /physics_cfgs/ pbl_dxref
    namelist /physics_cfgs_p/ pbl_dxref
       

@@ -1556,7 +1556,7 @@ END subroutine p3_init
                   diag_vis3      = diag_vis3,                                                  &
                   diag_dhmax     = diag_dhmax,                                                 &
                   supi_nuc_in    = supidth,                                                    &
-                  freq3Ddiag_in  = freq3Ddiag_gem
+                  freq3Ddiag_in  = freq3Ddiag_gem)
 
       if (global_status /= STATUS_OK) return
 

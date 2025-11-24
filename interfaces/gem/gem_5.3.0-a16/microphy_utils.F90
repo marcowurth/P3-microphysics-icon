@@ -71,7 +71,7 @@ contains
     use microphy_my2
     use microphy_kessler
     use microphy_thompson
-    use phy_options, only: stcond, p3_ncat, p3_trplmomi, p3_liqFrac, p3_iparam ! add switch for autoconv/accretion/self-collection
+    use phy_options, only: stcond, p3_ncat, p3_trplmomi, p3_liqFrac, p3_autoAccr_iparam
     implicit none
     character(len=*), intent(in) :: F_input_path  !Directory containing initializing data
     integer :: F_istat                            !Return status (PHY_OK on success)
@@ -97,7 +97,9 @@ contains
        mp_lwc => s2_lwc
        mp_iwc => s2_iwc
     case ('MP_P3')
-       call p3_init(F_input_path, p3_ncat, p3_trplmomi, p3_liqFrac, p3_iparam, stat=istat) ! add switch for autoconversion/accretion/self-collection
+       call p3_init(F_input_path, p3_ncat, p3_trplmomi, p3_liqFrac,            &
+                    autoAccr_param_in = p3_autoAccr_iparam,                    &
+                    stat = istat)
        if (istat == P3_STATUS_OK) istat = PHY_OK
        mp_phybusinit => p3_phybusinit
        mp_lwc => p3_lwc

@@ -71,7 +71,7 @@ contains
     use microphy_my2
     use microphy_kessler
     use microphy_thompson
-    use phy_options, only: stcond, p3_ncat, p3_trplmomi, p3_liqFrac, p3_iparam ! FRED DEBUG add switch for autoconv/accretion/self-collection
+    use phy_options, only: stcond, p3_ncat, p3_trplmomi, p3_liqFrac
     implicit none
     character(len=*), intent(in) :: F_input_path  !Directory containing initializing data
     integer :: F_istat                            !Return status (PHY_OK on success)
@@ -97,13 +97,13 @@ contains
        mp_lwc => s2_lwc
        mp_iwc => s2_iwc
     case ('MP_P3')
-       call p3_init(F_input_path, p3_ncat, p3_trplmomi, p3_liqFrac, p3_iparam, stat=istat) ! FRED add switch for autoconversion/accretion/self-collection
+       call p3_init(F_input_path, p3_ncat, p3_trplmomi, p3_liqFrac, stat=istat)
        if (istat == P3_STATUS_OK) istat = PHY_OK
        mp_phybusinit => p3_phybusinit
        mp_lwc => p3_lwc
        mp_iwc => p3_iwc
     case ('MP_P3V3')
-       call p3v3_init(F_input_path, p3_ncat, stat=istat) ! FRED DEBUG won't be compatible, I'm afraid...
+       call p3v3_init(F_input_path, p3_ncat, stat=istat)
        if (istat == P3_STATUS_OK) istat = PHY_OK
        mp_phybusinit => p3v3_phybusinit
        mp_lwc => p3v3_lwc

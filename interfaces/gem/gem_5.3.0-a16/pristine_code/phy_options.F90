@@ -7,7 +7,7 @@ module phy_options
 
    integer, parameter :: RAD_NUVBRANDS     = 6 !#TODO: move to a radiation specific module/cdk
    integer, parameter :: RAD_TCCL     = 9 !#TODO: move to a radiation specific module/cdk
-   integer(INT64), parameter :: MU_JDATE_HALFDAY = 43200 !#TODO: move to mu_jdate
+   integer(INT64), parameter :: MU_JDATE_HALFDAY = 43200 !#TODO: move to mu_jdate   
    logical           :: chemistry    = .false.
    logical           :: climat       = .false.
    logical           :: cmt_comp_diag = .false.
@@ -272,12 +272,6 @@ module phy_options
    namelist /physics_cfgs/ moyhr
    namelist /physics_cfgs_p/ moyhr
 
-   !# Switch for p3 parameterization of autoconversion/accretion/self-collection in microphysics (P3) scheme
-   !# 1:Seifert & Beheng 2000, 2:Beheng, 1994, 3:Khairoutdinov & Kogan, 2000, 4:Kogan 2013; (1:recommanded)
-   integer           :: p3_iparam = 3
-   namelist /physics_cfgs/ p3_iparam
-   namelist /physics_cfgs_p/ p3_iparam
-
    !# Number of ice-phase hydrometeor categories to use in the P3 microphysics
    !# scheme (currently limited to <5)
    integer           :: p3_ncat = 1
@@ -299,11 +293,6 @@ module phy_options
    real           :: p3_subfact = 1.0
    namelist /physics_cfgs/ p3_subfact
    namelist /physics_cfgs_p/ p3_subfact
-
-   !# Ice supersaturation threshold for deposition ice nucleation(P3)
-   real           :: p3_supid = .05
-   namelist /physics_cfgs/ p3_supid
-   namelist /physics_cfgs_p/ p3_supid
 
    !# switch for real-time debugging in microphysics (P3)
    logical         :: p3_debug = .false.
@@ -417,7 +406,8 @@ module phy_options
 
    !# Number of timesteps for which surface fluxes "FC" and "FV" are
    !# gradually set from 0 to their full value in a "slow start fashion"
-   !# at the beginning of a time integration
+   !# at the beginning of a time integration (max 20)
+   integer, parameter :: NSLOFLUXMAX = 20
    integer           :: nsloflux     = 0
    namelist /physics_cfgs/ nsloflux
    namelist /physics_cfgs_p/ nsloflux
