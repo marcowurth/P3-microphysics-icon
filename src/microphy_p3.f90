@@ -27,7 +27,7 @@
 !    https://github.com/P3-microphysics/P3-microphysics                                    !
 !__________________________________________________________________________________________!
 !                                                                                          !
-! Version:       5.5.0-rc12                                                                !
+! Version:       5.5.0-rc12+                                                               !
 ! Last updated:  2025 Nov                                                                  !
 !__________________________________________________________________________________________!
 
@@ -155,7 +155,7 @@
 
 ! Local variables and parameters:
  logical, save                  :: is_init = .false.
- character(len=1024), parameter :: version_p3                    = '5.5.0-rc12'
+ character(len=1024), parameter :: version_p3                    = '5.5.0-rc12+'
  character(len=1024), parameter :: version_intended_table_1_2mom = '6.9-2momI'
  character(len=1024), parameter :: version_intended_table_1_3mom = '6.9-3momI'
  character(len=1024), parameter :: version_intended_table_2      = '6.2'
@@ -921,7 +921,7 @@ END subroutine p3_init
    real, dimension(ims:ime, kms:kme,n_iceCat)  :: qiliq   ! liquid mixing ratio on ice     [kg kg-1]
 
    real, dimension(its:ite)                    :: pcprt_liq,pcprt_sol
-   real                                        :: dum1,dum2,dum3,dum4
+   real                                        :: dum1,dum2,dum3,dum4,freq3Ddiag
    integer                                     :: i,k,j
 
    real, dimension(ims:ime,          n_diag2d) :: diag2d         ! user-defined diagnostic fields (2D)
@@ -936,14 +936,24 @@ END subroutine p3_init
    real, dimension(its:ite, kts:kte) :: cldfrac                  ! cloud fraction computed by SCPF
    real                              :: scpf_pfrac               ! precipitation fraction factor (SCPF)
    real                              :: scpf_resfact             ! model resolution factor (SCPF)
-   real, parameter                   :: clbfact_dep   = 1.0      ! calibration factor for deposition
-   real, parameter                   :: clbfact_sub   = 1.0      ! calibration factor for sublimation
+   real, parameter                   :: clbfact_dep    =  1.     ! calibration factor for deposition
+   real, parameter                   :: clbfact_sub    =  1.     ! calibration factor for sublimation
+   real, parameter                   :: freq3Ddiag_wrf = 60.     ! frequency (min) for full-column diagnostics
+   real, parameter                   :: freq3Ddiag_cm1 =  5.     ! frequency (min) for full-column diagnostics
 
    !------------------------------------------------------------------------------------------!
 
    log_predictNc = present(nc)
    log_3momIce   = present(qzi_1)
    log_liqFrac   = present(qli_1)
+
+   if (trim(model)=='WRF') then
+      freq3Ddiag = freq3Ddiag_wrf
+   elseif (trim(model)=='CM1') then
+      freq3Ddiag = freq3Ddiag_cm1
+   else
+      freq3Ddiag = 0.
+   endif
 
    scpf_pfrac   = 0.  ! SCPF currently not used in WRF/CM1
    scpf_resfact = 0.  ! SCPF currently not used in WRF/CM1
@@ -1009,8 +1019,11 @@ END subroutine p3_init
                       diag_dmi(its:ite,kts:kte,1:n_iceCat),diag_rhoi(its:ite,kts:kte,1:n_iceCat),      &
                       n_diag2d,diag2d(its:ite,1:n_diag2d),n_diag3d,diag3d(its:ite,kts:kte,1:n_diag3d), &
                       log_predictNc,trim(model),clbfact_dep,clbfact_sub,log_debug,log_scpf,            &
-                      scpf_pfrac,scpf_resfact,cldfrac,log_3momIce,log_liqFrac,                         &
-                      diag_dhmax = diag_dhmax)
+                      scpf_pfrac,scpf_resfact,cldfrac,                                                 &
+                      log_3momentIce = log_3momIce,                                                    &
+                      log_LiquidFrac = log_liqFrac,                                                    &
+                      diag_dhmax     = diag_dhmax,                                                     &
+                      freq3Ddiag_in  = freq3Ddiag)
 
      !surface precipitation output:
       dum1 = 1000.*dt     ! to convert rates from mm/s to mm/time step
@@ -1316,7 +1329,7 @@ END subroutine p3_init
 
  real, dimension(ni,nk,n_qiType) :: qi_type     ! diagnostic precipitation types
 
- real, dimension(ni)     :: prt_liq_ave,prt_sol_ave,rn1_ave,rn2_ave,sn1_ave, &  ! ave pcp rates over full timestep
+ real, dimension(ni)     :: prt_liq_ave,prt_sol_ave,rn1_ave,rn2_ave,sn1_ave, &  ! ave pcp rates over full model timestep
                             sn2_ave,sn3_ave,pe1_ave,pe2_ave,snd_ave,ws_ave
  real                    :: dt_mp                                               ! timestep used by microphsyics (for substepping)
  real                    :: tmp1, idt
@@ -1324,8 +1337,9 @@ END subroutine p3_init
  integer                 :: i,k,ktop,kbot,kdir,i_strt,k_strt,i_substep,n_substep,end_status,tmpint1
 
  logical                 :: log_tmp1,log_tmp2,log_trplMomI,log_liqFrac
- logical, parameter      :: log_predictNc = .true.      ! temporary; to be put as GEM namelist
+ logical, parameter      :: log_predictNc  = .true.     ! temporary; to be put as GEM namelist
  real, parameter         :: SMALL_ICE_MASS = 1e-14      ! threshold for very small specific ice content
+ real, parameter         :: freq3Ddiag_gem = 60.        ! frequency (min) for full-column diagnostics
 
  character(len=16), parameter :: model = 'GEM'
 
@@ -1515,32 +1529,34 @@ END subroutine p3_init
      temp    = temp+ttdelta
      theta   = temp*tmparr_ik
 
-     if (.not. log_trplMomI)  zitot = 0.  !not used, but avoids passing uninialized values
-     if (.not. log_liqFrac)   qiliq = 0.  !not used, but avoids passing uninialized values
+     if (.not. log_trplMomI) zitot = 0.  !not used, but avoids passing uninialized values
+     if (.not. log_liqFrac)  qiliq = 0.  !not used, but avoids passing uninialized values
 
-     call p3_main(qc,nc,qr,nr,theta_m,theta,qvapm,qvap,dt_mp,qitot,qirim,qiliq,nitot,birim,     &
-                   zitot,ssat,ww,pres,DZ,kount,prt_liq,prt_sol,i_strt,ni,k_strt,nk,n_iceCat,    &
-                   diag_Zet,diag_effc,diag_effi,diag_vmi,diag_di,diag_rhoi,n_diag_2d,diag_2d,   &
-                   n_diag_3d,diag_3d,log_predictNc,trim(model),clbfact_dep,clbfact_sub,         &
-                   debug_on,scpf_on,scpf_pfrac,scpf_resfact,cldfrac,log_trplMomI,log_liqFrac,   &
-!                  nccnst     = nccnst,                                                         &
-                   prt_drzl   = prt_drzl,                                                       &
-                   prt_rain   = prt_rain,                                                       &
-                   prt_crys   = prt_crys,                                                       &
-                   prt_snow   = prt_snow,                                                       &
-                   prt_grpl   = prt_grpl,                                                       &
-                   prt_pell   = prt_pell,                                                       &
-                   prt_hail   = prt_hail,                                                       &
-                   prt_sndp   = prt_sndp,                                                       &
-                   prt_wsnow  = prt_wsnow,                                                      &
-                   qi_type    = qi_type,                                                        &
-                   diag_vis   = diag_vis,                                                       &
-                   diag_vis1  = diag_vis1,                                                      &
-                   diag_vis2  = diag_vis2,                                                      &
-                   diag_vis3  = diag_vis3,                                                      &
-                   diag_dhmax = diag_dhmax,                                                     &
-                   supi_nuc_in = supidth)
-
+     call p3_main(qc,nc,qr,nr,theta_m,theta,qvapm,qvap,dt_mp,qitot,qirim,qiliq,nitot,birim,    &
+                  zitot,ssat,ww,pres,DZ,kount,prt_liq,prt_sol,i_strt,ni,k_strt,nk,n_iceCat,    &
+                  diag_Zet,diag_effc,diag_effi,diag_vmi,diag_di,diag_rhoi,n_diag_2d,diag_2d,   &
+                  n_diag_3d,diag_3d,log_predictNc,trim(model),clbfact_dep,clbfact_sub,         &
+                  debug_on,scpf_on,scpf_pfrac,scpf_resfact,cldfrac,                            &
+                  log_3momentIce = log_trplMomI,                                               &
+                  log_LiquidFrac = log_liqFrac,                                                &
+!                 nccnst         = nccnst,                                                     &
+                  prt_drzl       = prt_drzl,                                                   &
+                  prt_rain       = prt_rain,                                                   &
+                  prt_crys       = prt_crys,                                                   &
+                  prt_snow       = prt_snow,                                                   &
+                  prt_grpl       = prt_grpl,                                                   &
+                  prt_pell       = prt_pell,                                                   &
+                  prt_hail       = prt_hail,                                                   &
+                  prt_sndp       = prt_sndp,                                                   &
+                  prt_wsnow      = prt_wsnow,                                                  &
+                  qi_type        = qi_type,                                                    &
+                  diag_vis       = diag_vis,                                                   &
+                  diag_vis1      = diag_vis1,                                                  &
+                  diag_vis2      = diag_vis2,                                                  &
+                  diag_vis3      = diag_vis3,                                                  &
+                  diag_dhmax     = diag_dhmax,                                                 &
+                  supi_nuc_in    = supidth,                                                    &
+                  freq3Ddiag_in  = freq3Ddiag_gem
 
       if (global_status /= STATUS_OK) return
 
@@ -1954,8 +1970,8 @@ END subroutine p3_init
                     clbfact_sub,debug_on,scpf_on,scpf_pfrac,scpf_resfact,SCF_out,         &
                     log_3momentIce,log_LiquidFrac,nccnst_in,prt_drzl,prt_rain,prt_crys,   &
                     prt_snow,prt_grpl,prt_pell,prt_hail,prt_sndp,prt_wsnow,qi_type,       &
-                    diag_vis,diag_vis1,diag_vis2,diag_vis3,diag_dhmax,supi_nuc_in,timer,  &
-                    timer_description)
+                    diag_vis,diag_vis1,diag_vis2,diag_vis3,diag_dhmax,supi_nuc_in,        &
+                    freq3Ddiag_in,timer,timer_description)
 
 !----------------------------------------------------------------------------------------!
 !                                                                                        !
@@ -2029,8 +2045,14 @@ END subroutine p3_init
  logical, intent(in)                                  :: debug_on       ! switch for internal debug checks
  character(len=*), intent(in)                         :: model          ! driving model
 
+ logical, intent(in)                                  :: scpf_on       ! Switch to activate SCPF
+ real,    intent(in)                                  :: scpf_pfrac    ! precipitation fraction factor (SCPF)
+ real,    intent(in)                                  :: scpf_resfact  ! model resolution factor (SCPF)
+ real,    intent(out), dimension(its:ite,kts:kte)     :: SCF_out       ! cloud fraction from SCPF
+
  real, intent(in),  optional                          :: nccnst_in     ! 1-mom cloud concentration     # m-3
  real, intent(in),  optional                          :: supi_nuc_in   ! ice supersat threshold for deposition nucleation
+ real, intent(in),  optional                          :: freq3Ddiag_in ! frequency (min) for full-column diagnostics
 
  real, intent(out), dimension(its:ite), optional      :: prt_drzl      ! precip rate, drizzle          m s-1
  real, intent(out), dimension(its:ite), optional      :: prt_rain      ! precip rate, rain             m s-1
@@ -2045,13 +2067,8 @@ END subroutine p3_init
  real, intent(out), dimension(its:ite,kts:kte,nCat),     optional :: diag_dhmax ! maximum hail size    m
  real, intent(out), dimension(its:ite,kts:kte,n_qiType), optional :: qi_type    ! mass mixing ratio, diagnosed ice type  kg kg-1
 
- logical, intent(in)                                  :: scpf_on       ! Switch to activate SCPF
- real,    intent(in)                                  :: scpf_pfrac    ! precipitation fraction factor (SCPF)
- real,    intent(in)                                  :: scpf_resfact  ! model resolution factor (SCPF)
- real,    intent(out), dimension(its:ite,kts:kte)     :: SCF_out       ! cloud fraction from SCPF
-
- real,    intent(out), dimension(20), optional        :: timer    ! CPU time for block of text (timer = timer_end - timer_start)
- character(len=20), intent(out), dimension(20), optional :: timer_description  ! description of block being timed
+ real,              intent(out), dimension(20), optional :: timer             ! local CPU time for code block (timer = timer_end - timer_start)
+ character(len=20), intent(out), dimension(20), optional :: timer_description ! description of code block being timed
 
  !----- Local variables and parameters:  -------------------------------------------------!
 
@@ -2239,13 +2256,14 @@ END subroutine p3_init
  real, dimension(nCat) :: epsiz,epsizsb
 
 ! quantities related to diagnostic hydrometeor/precipitation types
- real,    parameter                       :: freq3DtypeDiag     = 60.     !frequency (min) for full-column diagnostics
- real,    parameter                       :: freq3DtypeDiag_cm1 =  5.     !frequency (min) for full-column diagnostics (CM1 only)
- real,    parameter                       :: thres_raindrop     = 100.e-6 !size threshold for drizzle vs. rain
+ real,    parameter                       :: thres_raindrop  = 100.e-6 !size threshold for drizzle vs. rain
  real,    dimension(its:ite,kts:kte)      :: Q_drizzle,Q_rain
  real,    dimension(its:ite,kts:kte,nCat) :: Q_crystals,Q_snow,Q_wsnow,Q_grpl,Q_pellets,Q_hail
  integer                                  :: ktop_typeDiag    !ktop_typeDiag_r,ktop_typeDiag_i
  logical                                  :: log_typeDiags,log_typeDiag_column
+
+ real               :: freq3Ddiag              ! frequency (min) for full-column diagnostics
+ real, parameter    :: freq3Ddiag_default = 5. ! value set if not passed in
 
 ! to be added as namelist parameters (future)
  logical, parameter :: debug_ABORT  = .true. !.true. will result in forced abort in s/r 'check_values'
@@ -2332,10 +2350,16 @@ call cpu_time(timer_start(1))
 ! for all other configurations, set qsmall_dry to a smaller value. Using improves the P3 run time by several %
 ! and impacts the radar reflectivity field by removing areas of small reflectivity,
 ! but otherwise has no noticeable impact on simulations.
- if (Ncat.eq.1.and..not.(log_3momentIce).and..not.(log_LiquidFrac)) then
+ if (nCat.eq.1.and..not.(log_3momentIce).and..not.(log_LiquidFrac)) then
       qsmall_dry = qsmall_dry1
  else
       qsmall_dry = qsmall_dry2
+ endif
+
+ if (present(freq3Ddiag_in)) then
+    freq3Ddiag = freq3Ddiag_in
+ else
+    freq3Ddiag = freq3Ddiag_default
  endif
 
  tmp1 = uzpl(its,kts)     !avoids compiler warning for unused variable (since code using 'uzpl' is currently commented)
@@ -5108,7 +5132,7 @@ call cpu_time(timer_end(2))
 ! for partitioning into corresponding surface precipitation rates.
 !
 !   In the code below, the full columns of diagnostic types are computed
-!   only at the specified frequency, freq3DtypeDiag.  At all other time
+!   only at the specified frequency, freq3Ddiag.  At all other time
 !   steps, they are computed at the lowest level only (kbot) in order to
 !   partition surface precipitation rates into types (and aslo for the
 !   maximum hail size, dhmax).
@@ -5118,22 +5142,22 @@ timer_description(9) = 'type_diags'
 call cpu_time(timer_start(9))
 #endif
 
- log_outputStep     = freq3DtypeDiag>0.     .and. mod(it*dt,freq3DtypeDiag*60.)==0.
- log_outputStep_cm1 = freq3DtypeDiag_cm1>0. .and. mod(it*dt,freq3DtypeDiag_cm1*60.)==0.
+ log_outputStep = (mod(it*dt,freq3Ddiag*60.)==0. .or. freq3Ddiag==0.)                    &
+                  .and. .not.freq3Ddiag<0.
 
-!--- diagnostics CM1 and KIN1D only:
- if ((log_outputStep_cm1 .and. trim(model)=='CM1') .or. trim(model)=='KIN1D') then
-   !diag_3d(:,:,1) = sum(qitot(:,:,:),dim=3)
-    do k = ktop,kbot,-kdir
-     do i = its,ite
-         do iice = 1,nCat
-            tmp1 = qirim(i,k,iice)/max(qsmall,qitot(i,k,iice)-qiliq(i,k,iice))  !rime fraction
-            diag_dhmax(i,k,iice) = maxHailSize(rho(i,k),nitot(i,k,iice),rhofaci(i,k),    &
-                                               arr_lami(i,k,iice),arr_mui(i,k,iice),     &
-                                               diag_rhoi(i,k,iice),tmp1)
-         enddo
-     enddo
-    enddo
+!--- diagnostics CM1:
+ if (log_outputStep .and. trim(model)=='CM1') then
+    diag_3d(:,:,1) = sum(qitot(:,:,:),dim=3)
+!     do k = ktop,kbot,-kdir
+!      do i = its,ite
+!          do iice = 1,nCat
+!             tmp1 = qirim(i,k,iice)/max(qsmall,qitot(i,k,iice)-qiliq(i,k,iice))  !rime fraction
+!             diag_dhmax(i,k,iice) = maxHailSize(rho(i,k),nitot(i,k,iice),rhofaci(i,k),    &
+!                                                arr_lami(i,k,iice),arr_mui(i,k,iice),     &
+!                                                diag_rhoi(i,k,iice),tmp1)
+!          enddo
+!      enddo
+!     enddo
  endif
 !---
 
