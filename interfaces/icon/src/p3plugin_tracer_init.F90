@@ -1,20 +1,17 @@
 
 MODULE p3plugin_tracer_init
   !USE omp_lib
-  USE netcdf,                  ONLY : nf90_open, nf90_close, nf90_inq_dimid, nf90_inquire,              &
-    &                                 nf90_inq_varid, nf90_inquire_variable, nf90_inquire_dimension,    &
-    &                                 nf90_get_var, NF90_FLOAT, NF90_DOUBLE,                            &
+  USE netcdf,                  ONLY : nf90_open, nf90_close, nf90_inq_dimid, nf90_inquire,                  &
+    &                                 nf90_inq_varid, nf90_inquire_variable, nf90_inquire_dimension,        &
+    &                                 nf90_get_var, NF90_FLOAT, NF90_DOUBLE,                                &
     &                                 NF90_NOWRITE, NF90_NOERR, NF90_MAX_VAR_DIMS
 
-  USE comin_plugin_interface,  ONLY : comin_parallel_get_host_mpi_rank,                                 &
-    &                                 comin_descrdata_get_domain, t_comin_descrdata_domain,             &
-    &                                 comin_descrdata_get_global, t_comin_descrdata_global,             &
-    &                                 comin_plugin_finish, comin_descrdata_get_cell_indices
+  USE comin_plugin_interface,  ONLY : comin_parallel_get_host_mpi_rank, comin_descrdata_get_timesteplength, &
+    &                                 comin_descrdata_get_cell_indices, comin_plugin_finish
 
   USE p3plugin_types,          ONLY : t_dyn_vars_3dptr, t_icon_tracer_3dptr, t_p3_tracer_3dptr
-
-  USE p3plugin_global_vars,    ONLY : n_icecat, ihydrometeor_ini, l3mom_ice, lliqfrac,                  &
-    &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,       &
+  USE p3plugin_global_vars,    ONLY : dtime, fastphystep, n_icecat, ihydrometeor_ini, l3mom_ice, lliqfrac,  &
+    &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,           &
     &                                 dyn_vars, icon_tracer, p3_tracer
 
   USE microphy_p3,             ONLY : p3_init, status_ok
@@ -51,11 +48,13 @@ CONTAINS
     TYPE(t_dyn_vars_3dptr)    :: dyn_vars_3d
 
     rank = comin_parallel_get_host_mpi_rank()
-
     IF (rank == 0) WRITE (0,*) 'call p3_init'
+
     CALL p3_init(TRIM(lookup_tables_path), n_icecat, l3mom_ice, lliqfrac, model, stat, abort_on_err, dowr)
     IF (stat /= status_ok) CALL comin_plugin_finish('call_p3_init (p3plugin)', 'failed!')
 
+    dtime = comin_descrdata_get_timesteplength(1)
+    fastphystep = 1
 
     CALL icon_tracer%qv%to_3d(icon_tracer_3d%qv)
     CALL icon_tracer%qc%to_3d(icon_tracer_3d%qc)
