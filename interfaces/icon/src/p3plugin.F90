@@ -182,14 +182,14 @@ CONTAINS
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('ddt_temp_phys', id), IOR(FR, FW), dyn_vars%ddt_temp_phys)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('w', id), FR, dyn_vars%w_hl)
 
-    CALL comin_var_get([ep_init, ep_mp, ep_out], t_comin_var_descriptor('qv', id), IOR(FR, FW), icon_tracer%qv)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('qv', id), IOR(FR, FW), icon_tracer%qv)
     CALL comin_var_get([ep_mp], t_comin_var_descriptor('qv_old', id), IOR(FR, FW), icon_tracer%qv_old)
     CALL comin_var_get([ep_init, ep_mp, ep_out], t_comin_var_descriptor('qc', id), IOR(FR, FW), icon_tracer%qc)
-    CALL comin_var_get([ep_init, ep_mp, ep_nudg, ep_out], t_comin_var_descriptor('qi', id), IOR(FR, FW), icon_tracer%qi)
-    CALL comin_var_get([ep_init, ep_mp, ep_nudg, ep_out], t_comin_var_descriptor('qs', id), IOR(FR, FW), icon_tracer%qs)
     CALL comin_var_get([ep_init, ep_mp, ep_out], t_comin_var_descriptor('qr', id), IOR(FR, FW), icon_tracer%qr)
     CALL comin_var_get([ep_init, ep_turb, ep_mp, ep_out], t_comin_var_descriptor('qnc', id), IOR(FR, FW), icon_tracer%qnc)
     CALL comin_var_get([ep_init, ep_turb, ep_mp, ep_out], t_comin_var_descriptor('qnr', id), IOR(FR, FW), icon_tracer%qnr)
+    CALL comin_var_get([ep_init, ep_mp, ep_nudg, ep_out], t_comin_var_descriptor('qi', id), IOR(FR, FW), icon_tracer%qi)
+    CALL comin_var_get([ep_init, ep_mp, ep_nudg, ep_out], t_comin_var_descriptor('qs', id), IOR(FR, FW), icon_tracer%qs)
     !CALL comin_var_get([ep_turb], t_comin_var_descriptor('ddt_qnc_turb', id), FR, icon_tracer_ddt_turb%qnc)
     !CALL comin_var_get([ep_turb], t_comin_var_descriptor('ddt_qnr_turb', id), FR, icon_tracer_ddt_turb%qnr)
 

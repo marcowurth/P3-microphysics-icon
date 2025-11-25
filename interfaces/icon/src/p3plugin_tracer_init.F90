@@ -32,6 +32,7 @@ CONTAINS
     CHARACTER(30)     :: varname      = ''
     LOGICAL           :: abort_on_err = .TRUE.
     LOGICAL           :: dowr         = .FALSE.
+    LOGICAL           :: lvarfound
     INTEGER           :: stat, rank, i_icecat
     INTEGER           :: jg, jb, jk, jc, jglobal
     INTEGER           :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
@@ -40,6 +41,7 @@ CONTAINS
     REAL              :: rhow, rhop_qi, rhop_qs, rhop_qg, rhor_qs, rhor_qg
     REAL              :: frim_qs, frim_qg
     REAL, ALLOCATABLE :: hfl_3dpatch(:, :, :)
+    REAL, ALLOCATABLE :: qr_ini_3dpatch(:, :, :)
     REAL, ALLOCATABLE :: qs_ini_3dpatch(:, :, :)
     REAL, ALLOCATABLE :: qg_ini_3dpatch(:, :, :)
 
@@ -56,7 +58,6 @@ CONTAINS
     dtime = comin_descrdata_get_timesteplength(1)
     fastphystep = 1
 
-    CALL icon_tracer%qv%to_3d(icon_tracer_3d%qv)
     CALL icon_tracer%qc%to_3d(icon_tracer_3d%qc)
     CALL icon_tracer%qnc%to_3d(icon_tracer_3d%qnc)
     CALL icon_tracer%qr%to_3d(icon_tracer_3d%qr)
@@ -79,7 +80,7 @@ CONTAINS
 
 
     IF (ihydrometeor_ini == 1) THEN
-      IF (rank == 0) WRITE (0,*) 'initialize from 1M-scheme mass ice tracers qi, qs, qg'
+      IF (rank == 0) WRITE (0,*) 'initialize from 1M-scheme mass tracers qc, qr, qi, qs and if available qg'
 
       dmean_qc    = 15.e-6   ! number-mean diameter in m
       dmean_qr    = 600e-6   ! number-mean diameter in m (P3's internal upper limit is 1/inv_Drmax=2mm)
@@ -102,13 +103,24 @@ CONTAINS
       frim_qg     = 0.9       ! bulk rime mass fraction
 
       ALLOCATE(hfl_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
+      ALLOCATE(qr_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
       ALLOCATE(qs_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
       ALLOCATE(qg_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
 
       CALL dyn_vars%hfl%to_3d(dyn_vars_3d%hfl)
       hfl_3dpatch = dyn_vars_3d%hfl
+
+      CALL read_vinterp_ini_var(tracer_ini_filename, 'QR', hfl_3dpatch, qr_ini_3dpatch)
       CALL read_vinterp_ini_var(tracer_ini_filename, 'QS', hfl_3dpatch, qs_ini_3dpatch)
-      CALL read_vinterp_ini_var(tracer_ini_filename, 'QG', hfl_3dpatch, qg_ini_3dpatch)
+
+      CALL query_file_for_var(tracer_ini_filename, 'QG', lvarfound)
+
+      IF (lvarfound) THEN
+        IF (rank == 0) WRITE (0,*) 'found tracer qg in tracer_ini_filename, reading it in...'
+        CALL read_vinterp_ini_var(tracer_ini_filename, 'QG', hfl_3dpatch, qg_ini_3dpatch)
+      ELSE
+        IF (rank == 0) WRITE (0,*) 'did not find tracer qg in tracer_ini_filename, initialize P3 ice with qi & qs only'
+      ENDIF
     ENDIF
 
     !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of ' // TRIM(varname)
@@ -160,105 +172,97 @@ CONTAINS
 
           CASE (1)
             ! initialization of warm phase:
-            ! qv, qc, qr were already loaded and set in initicon
+            ! qv, qc were already read from file and set in initicon
+
+            icon_tracer_3d%qr(jc,jk,jb) = qr_ini_3dpatch(jc,jk,jb)
 
             icon_tracer_3d%qnc(jc,jk,jb) = icon_tracer_3d%qc(jc,jk,jb) / (rhow*3.14) * dmean_qc**-3
             icon_tracer_3d%qnr(jc,jk,jb) = icon_tracer_3d%qr(jc,jk,jb) / (rhow*3.14) * dmean_qr**-3
             ! dmean_qc = (qc / (qnc*rhow*3.14))**(1./3.)
 
             ! initialization of cold phase:
-            ! 1: initialize from 1M-scheme mass tracers (qi, qs, qg)
+            ! qi was already read from file and set in initicon, use it as ice category 1
+            ! use the read in 1M-scheme mass tracer qs [and qg]
             ! if n_icecat == 1: init only cloud ice qi and ignore precipitating types qs, qg
             ! if n_icecat == 2: use the first icecat for qi and the second icecat for merged qs + qg
             ! if n_icecat >= 3: use one icecat for qi, qs, qg each
             ! all other icecats (if more available) are kept empty
 
-            IF (n_icecat == 1) THEN
-              p3_tracer_3d(1)%qitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb)
-              p3_tracer_3d(1)%qnitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb) / (rhop_qi*3.14) &
-                &                                               * magicfac_qi * dmean_qi**-3
-              p3_tracer_3d(1)%qirim(jc,jk,jb) = 0.0
-              p3_tracer_3d(1)%birim(jc,jk,jb) = 0.0
+            ! cloud ice, assume no riming part present: Fr = 0
+            p3_tracer_3d(1)%qitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb)
+            p3_tracer_3d(1)%qnitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb) / (rhop_qi*3.14) &
+              &                                               * magicfac_qi * dmean_qi**-3
+            p3_tracer_3d(1)%qirim(jc,jk,jb) = 0.0
+            p3_tracer_3d(1)%birim(jc,jk,jb) = 0.0
+            IF (l3mom_ice) THEN
+              p3_tracer_3d(1)%qzitot(jc,jk,jb) = 0.0
+            ENDIF
+            IF (lliqfrac) THEN
+              p3_tracer_3d(1)%qiliq(jc,jk,jb) = 0.0
+            ENDIF
+
+            ! precipitating ice, use two separate icecats if available (n_icecat > 2), merge into one if not
+            ! in case QG was not in the ini file, qg_ini_3dpatch equals zero and ice category 2 is only snow
+            IF (lvarfound == .FALSE.) THEN
+              qg_ini_3dpatch(jc,jk,jb) = 0.0
+            ENDIF
+
+            IF (n_icecat == 2) THEN
+              p3_tracer_3d(2)%qitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) + qg_ini_3dpatch(jc,jk,jb)
+              p3_tracer_3d(2)%qnitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) / (rhop_qs*3.14)  &
+                &                                * magicfac_qs * dmean_qs**-3               &
+                &                              + qg_ini_3dpatch(jc,jk,jb) / (rhop_qg*3.14)  &
+                &                                * magicfac_qg * dmean_qg**-3
+              p3_tracer_3d(2)%qirim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs  &
+                &                             + qg_ini_3dpatch(jc,jk,jb) * frim_qg
+              p3_tracer_3d(2)%birim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs / rhor_qs  &
+                &                             + qg_ini_3dpatch(jc,jk,jb) * frim_qg / rhor_qg
               IF (l3mom_ice) THEN
-                p3_tracer_3d(1)%qzitot(jc,jk,jb) = 0.0
+                p3_tracer_3d(2)%qzitot(jc,jk,jb) = 0.0
               ENDIF
               IF (lliqfrac) THEN
-                p3_tracer_3d(1)%qiliq(jc,jk,jb) = 0.0
+                p3_tracer_3d(2)%qiliq(jc,jk,jb) = 0.0
               ENDIF
 
-            ELSE
-              ! cloud ice, assume no riming part present
-              p3_tracer_3d(1)%qitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb)
-              p3_tracer_3d(1)%qnitot(jc,jk,jb) = icon_tracer_3d%qi(jc,jk,jb) / (rhop_qi*3.14) &
-                &                                               * magicfac_qi * dmean_qi**-3
-              p3_tracer_3d(1)%qirim(jc,jk,jb) = 0.0
-              p3_tracer_3d(1)%birim(jc,jk,jb) = 0.0
+            ELSE IF (n_icecat > 2) THEN
+              p3_tracer_3d(2)%qitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb)
+              p3_tracer_3d(2)%qnitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) / (rhop_qs*3.14) &
+                &                                * magicfac_qs * dmean_qs**-3
+              p3_tracer_3d(2)%qirim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs
+              p3_tracer_3d(2)%birim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs / rhor_qs
               IF (l3mom_ice) THEN
-                p3_tracer_3d(1)%qzitot(jc,jk,jb) = 0.0
+                p3_tracer_3d(2)%qzitot(jc,jk,jb) = 0.0
               ENDIF
               IF (lliqfrac) THEN
-                p3_tracer_3d(1)%qiliq(jc,jk,jb) = 0.0
+                p3_tracer_3d(2)%qiliq(jc,jk,jb) = 0.0
               ENDIF
 
-              ! precipitating ice, use two separate icecats if available, merge into one if not
-              IF (n_icecat == 2) THEN
-                p3_tracer_3d(2)%qitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) + qg_ini_3dpatch(jc,jk,jb)
-                p3_tracer_3d(2)%qnitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) / (rhop_qs*3.14)  &
-                  &                                * magicfac_qs * dmean_qs**-3               &
-                  &                              + qg_ini_3dpatch(jc,jk,jb) / (rhop_qg*3.14)  &
-                  &                                * magicfac_qg * dmean_qg**-3
-                p3_tracer_3d(2)%qirim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs  &
-                  &                             + qg_ini_3dpatch(jc,jk,jb) * frim_qg
-                p3_tracer_3d(2)%birim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs / rhor_qs  &
-                  &                             + qg_ini_3dpatch(jc,jk,jb) * frim_qg / rhor_qg
-                IF (l3mom_ice) THEN
-                  p3_tracer_3d(2)%qzitot(jc,jk,jb) = 0.0
-                ENDIF
-                IF (lliqfrac) THEN
-                  p3_tracer_3d(2)%qiliq(jc,jk,jb) = 0.0
-                ENDIF
-
-              ELSE
-                p3_tracer_3d(2)%qitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb)
-                p3_tracer_3d(2)%qnitot(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) / (rhop_qs*3.14) &
-                  &                                * magicfac_qs * dmean_qs**-3
-                p3_tracer_3d(2)%qirim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs
-                p3_tracer_3d(2)%birim(jc,jk,jb) = qs_ini_3dpatch(jc,jk,jb) * frim_qs / rhor_qs
-                IF (l3mom_ice) THEN
-                  p3_tracer_3d(2)%qzitot(jc,jk,jb) = 0.0
-                ENDIF
-                IF (lliqfrac) THEN
-                  p3_tracer_3d(2)%qiliq(jc,jk,jb) = 0.0
-                ENDIF
-
-                p3_tracer_3d(3)%qitot(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb)
-                p3_tracer_3d(3)%qnitot(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb) / (rhop_qg*3.14) &
-                  &                                * magicfac_qg * dmean_qg**-3
-                p3_tracer_3d(3)%qirim(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb) * frim_qg
-                p3_tracer_3d(3)%birim(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb) * frim_qg / rhor_qg
-                IF (l3mom_ice) THEN
-                  p3_tracer_3d(3)%qzitot(jc,jk,jb) = 0.0
-                ENDIF
-                IF (lliqfrac) THEN
-                  p3_tracer_3d(3)%qiliq(jc,jk,jb) = 0.0
-                ENDIF
+              p3_tracer_3d(3)%qitot(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb)
+              p3_tracer_3d(3)%qnitot(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb) / (rhop_qg*3.14) &
+                &                                * magicfac_qg * dmean_qg**-3
+              p3_tracer_3d(3)%qirim(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb) * frim_qg
+              p3_tracer_3d(3)%birim(jc,jk,jb) = qg_ini_3dpatch(jc,jk,jb) * frim_qg / rhor_qg
+              IF (l3mom_ice) THEN
+                p3_tracer_3d(3)%qzitot(jc,jk,jb) = 0.0
               ENDIF
-
-              IF (n_icecat > 3) THEN
-                DO i_icecat = 4, n_icecat
-                  p3_tracer_3d(i_icecat)%qitot(jc,jk,jb) = 0.0
-                  p3_tracer_3d(i_icecat)%qnitot(jc,jk,jb) = 0.0
-                  p3_tracer_3d(i_icecat)%qirim(jc,jk,jb) = 0.0
-                  p3_tracer_3d(i_icecat)%birim(jc,jk,jb) = 0.0
-                  IF (l3mom_ice) THEN
-                    p3_tracer_3d(i_icecat)%qzitot(jc,jk,jb) = 0.0
-                  ENDIF
-                  IF (lliqfrac) THEN
-                    p3_tracer_3d(i_icecat)%qiliq(jc,jk,jb) = 0.0
-                  ENDIF
-                END DO
+              IF (lliqfrac) THEN
+                p3_tracer_3d(3)%qiliq(jc,jk,jb) = 0.0
               ENDIF
+            ENDIF
 
+            IF (n_icecat > 3) THEN
+              DO i_icecat = 4, n_icecat
+                p3_tracer_3d(i_icecat)%qitot(jc,jk,jb) = 0.0
+                p3_tracer_3d(i_icecat)%qnitot(jc,jk,jb) = 0.0
+                p3_tracer_3d(i_icecat)%qirim(jc,jk,jb) = 0.0
+                p3_tracer_3d(i_icecat)%birim(jc,jk,jb) = 0.0
+                IF (l3mom_ice) THEN
+                  p3_tracer_3d(i_icecat)%qzitot(jc,jk,jb) = 0.0
+                ENDIF
+                IF (lliqfrac) THEN
+                  p3_tracer_3d(i_icecat)%qiliq(jc,jk,jb) = 0.0
+                ENDIF
+              END DO
             ENDIF
 
           END SELECT
@@ -286,10 +290,28 @@ CONTAINS
   END SUBROUTINE init_p3_and_tracer
 
 
+  SUBROUTINE query_file_for_var(filename, varname, lvarfound)
+    CHARACTER(*), INTENT(IN) :: filename, varname
+    LOGICAL, INTENT(OUT)     :: lvarfound
+
+    INTEGER                  :: rank, nc_status, ncid, varid
+
+    ncid = -99
+    nc_status = nf90_open(TRIM(filename), NF90_NOWRITE, ncid)
+    IF (nc_status /= NF90_NOERR) &
+      & CALL comin_plugin_finish('query_file_for_var (p3plugin)', 'Could not read file: ' // TRIM(filename))
+
+    lvarfound = .FALSE.
+    nc_status = nf90_inq_varid(ncid, varname, varid)
+    IF (nc_status == NF90_NOERR) lvarfound = .TRUE.
+
+  END SUBROUTINE
+
+
   SUBROUTINE read_vinterp_ini_var(filename, varname, hfl_3dpatch_outlevs, var_3dpatch_outlevs)
-    CHARACTER(*), INTENT(IN)                            :: filename, varname
-    REAL, INTENT(IN)                                    :: hfl_3dpatch_outlevs(:, :, :)
-    REAL, INTENT(OUT)                                   :: var_3dpatch_outlevs(:, :, :)
+    CHARACTER(*), INTENT(IN) :: filename, varname
+    REAL, INTENT(IN)         :: hfl_3dpatch_outlevs(:, :, :)
+    REAL, INTENT(OUT)        :: var_3dpatch_outlevs(:, :, :)
 
     CHARACTER(30)            :: varname_dummy, dimname
     INTEGER                  :: rank, nc_status, ncid, ncells_global, nlev_in
