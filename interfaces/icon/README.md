@@ -92,6 +92,7 @@ Three options are available set by `itracer_ini` for the initialization of the P
 - 0: initialize without clouds and precipitation, "dry" (only qv present)
 - 1: initialize from 1M-scheme mass tracers qc, qr, qi, qs, if available also use qg
 - 3: initialize from P3 tracers  
+
 The tracer_ini_filename file must be in netcdf4 format and also contain the model halve levels of the ini data (named `hhl` or `HHL`) as a 2D-field. The tracer fields can be 2D like e.g. (height, ncells) or 3D like e.g. (time, height, ncells) but the dimensions can also be of another order e.g. (height. ncells, time). The fields are interpolated vertically from the ini data levels to the model run levels. This way a typical output file from a 1M-scheme or P3-scheme model run can be used to initialize P3 and therefore "offline" nesting is possible.  
 In the initialization with P3 tracers, if the ice category number between ini data and model run doesn't match additional categories are ignored or categories left empty. The same applies for differing settings of `l3mom_ice` or `lliqfrac`.
 
