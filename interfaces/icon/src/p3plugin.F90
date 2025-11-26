@@ -13,7 +13,7 @@ MODULE p3plugin
     &                                 t_comin_plugin_info, comin_current_get_plugin_info,               &
     &                                 comin_plugin_finish
 
-  USE p3plugin_global_vars,    ONLY : n_icecat, ihydrometeor_ini, l3mom_ice, lliqfrac,                  &
+  USE p3plugin_global_vars,    ONLY : n_icecat, itracer_ini, l3mom_ice, lliqfrac,                       &
     &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,       &
     &                                 dyn_vars, mp_vars, p3_vars,                                       &
     &                                 icon_tracer, icon_tracer_ddt_turb, p3_tracer, p3_tracer_ddt_turb
@@ -26,7 +26,7 @@ MODULE p3plugin
 
   INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
 
-  NAMELIST /p3_nml/ n_icecat, l3mom_ice, lliqfrac, ihydrometeor_ini, tracer_ini_filename, lookup_tables_path
+  NAMELIST /p3_nml/ n_icecat, l3mom_ice, lliqfrac, itracer_ini, tracer_ini_filename, lookup_tables_path
 
 CONTAINS
 

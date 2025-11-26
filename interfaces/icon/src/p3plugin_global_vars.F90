@@ -8,7 +8,7 @@ MODULE p3plugin_global_vars
   IMPLICIT NONE
   PRIVATE
 
-  PUBLIC :: n_icecat, ihydrometeor_ini, fastphystep, dtime
+  PUBLIC :: n_icecat, itracer_ini, fastphystep, dtime
   PUBLIC :: l3mom_ice, lliqfrac
   PUBLIC :: tracer_ini_filename, lookup_tables_path
   PUBLIC :: p_global, p_patch
@@ -17,7 +17,7 @@ MODULE p3plugin_global_vars
   PUBLIC :: icon_tracer_ddt_turb, p3_tracer_ddt_turb
 
 
-  INTEGER        :: n_icecat, ihydrometeor_ini, fastphystep
+  INTEGER        :: n_icecat, itracer_ini, fastphystep
   REAL           :: dtime
   LOGICAL        :: l3mom_ice, lliqfrac
   CHARACTER(999) :: tracer_ini_filename, lookup_tables_path

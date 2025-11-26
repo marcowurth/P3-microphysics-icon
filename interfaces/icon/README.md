@@ -70,23 +70,32 @@ plugin_list(1)%comm           = 'p3_comm'
 
 ## Usage
 ### Main namelist settings
-Apart from the `&comin_nml` group you need to turn off the internal microphysics and saturation adjustment schemes. Using 3-moments for the ice phase is recommended for all cases since it does barely need more computing time. The number of ice categories has a larger effect on runtime, 2 is a good intermediate setting. When using only 1 larger ice particles will be numerically diluted/shrunk in regions of ice nucleation because the gamma distribution does only represent one size peak that cannot well describe very small and large ice particles.
+Apart from the `&comin_nml` group you need to set `inwp_gscp` to -1 (external microphysics) and turn off saturation adjustment schemes. Using 3-moments for the ice phase is recommended for all cases since it does barely need more computing time. The number of ice categories has a larger effect on runtime, 2 is a good intermediate setting. When using only 1 larger ice particles will be numerically diluted/shrunk in regions of ice nucleation because the gamma distribution does only represent one size peak that cannot well describe very small and large ice particles.
 ```
 &nwp_phy_nml
- inwp_gscp                   =                         -1         ! cloud microphysics and precipitation
- inwp_satad                  =                          0         ! saturation adjustment
- icpl_rad_reff               =                          0         ! currently only setting that passes the crosschecks
- icalc_reff                  =                          0         ! currently only setting that passes the crosschecks
+ inwp_gscp                   =                         -1         ! -1: external microphysics via ComIn
+ inwp_satad                  =                          0         ! saturation adjustment off
+ icalc_reff                  =                          0         ! currently only possible setting (no calculation)
+ icpl_rad_reff               =                          0         ! currently only possible setting (no calculation)
 /
 &p3_nml
  n_icecat                    =                          2         ! number of free ice categories (P3 scheme)
  l3mom_ice                   =                      .TRUE.        ! use triple moment ice categories (P3 scheme)
  lliqfrac                    =                      .TRUE.        ! use predicted bulk liquid fraction (P3 scheme)
- ihydrometeor_ini            =                          1         ! 0: dry initialization, 1: read 1M-scheme tracer, 3: read P3 tracer
+ itracer_ini                 =                          1         ! 0: dry initialization, 1: read 1M-scheme tracer, 3: read P3 tracer
  tracer_ini_filename         =       '$INILBCDIR/$ININAME'
  lookup_tables_path          =     '${lookup_tables_path}'
 /
 ```
+### P3 Initialization
+Three options are available set by `itracer_ini` for the initialization of the P3 tracers:
+- 0: initialize without clouds and precipitation, "dry" (only qv present)
+- 1: initialize from 1M-scheme mass tracers qc, qr, qi, qs, if available also use qg
+- 3: initialize from P3 tracers, if the ice category number between ini data and model run doesn't match additional categories are ignored or categories left empty. The same applies for differing settings of `l3mom_ice` or `lliqfrac`
+The tracer_ini_filename file must be in netcdf4 format and also contain the model halve levels of the ini data (named `hhl` or `HHL`) as a 2D-field. The tracer fields can be 2D like e.g. (height, ncells) or 3D like e.g. (time, height, ncells) but the dimensions can be of another order e.g. (height. ncells, time). The fields are interpolated vertically from the ini data levels to the model run levels. This way a typical output file from a 1M-scheme or P3-scheme model run can be used to initialize P3 and therefore "offline" nesting is possible.
+
+### P3 lateral boundary conditions for ICON-LAM setups
+This is not handled at the moment, qc and qi LBC fields are read by ICON and nudged in the nudging zone but qi is not read by P3 and therefore only qc is being nudged in and out of the domain.
 
 ### Further settings in P3
 P3 is run always with 2-moment cloud droplets (in theory it could run also with 1-moment cloud droplets), the CCN activation and maximum concentration can be set in `microphy_p3.F90` with `iparam_ccn`. The warm-phase autoconversion can be set with `iparam_rain` and the homogeneous freezing level with `t_hom_freeze` (no INP activation implemented currently in P3, only droplet immersion freezing after Bigg, 1953).

@@ -10,7 +10,7 @@ MODULE p3plugin_tracer_init
     &                                 comin_descrdata_get_cell_indices, comin_plugin_finish
 
   USE p3plugin_types,          ONLY : t_dyn_vars_3dptr, t_icon_tracer_3dptr, t_p3_tracer_3dptr
-  USE p3plugin_global_vars,    ONLY : dtime, fastphystep, n_icecat, ihydrometeor_ini, l3mom_ice, lliqfrac,  &
+  USE p3plugin_global_vars,    ONLY : dtime, fastphystep, n_icecat, itracer_ini, l3mom_ice, lliqfrac,  &
     &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,           &
     &                                 dyn_vars, icon_tracer, p3_tracer
 
@@ -30,10 +30,11 @@ CONTAINS
 
     CHARACTER(16)     :: model        = 'ICON'
     CHARACTER(30)     :: varname      = ''
+    CHARACTER(20)     :: icecat_name
     LOGICAL           :: abort_on_err = .TRUE.
     LOGICAL           :: dowr         = .FALSE.
-    LOGICAL           :: lvarfound
-    INTEGER           :: stat, rank, i_icecat
+    LOGICAL           :: lvarfound, l3mom_ice_ini, lliqfrac_ini
+    INTEGER           :: stat, rank, i_icecat, n_icecat_ini
     INTEGER           :: jg, jb, jk, jc, jglobal
     INTEGER           :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
     REAL              :: dmean_qc, dmean_qr, dmean_qi, dmean_qs, dmean_qg
@@ -41,9 +42,17 @@ CONTAINS
     REAL              :: rhow, rhop_qi, rhop_qs, rhop_qg, rhor_qs, rhor_qg
     REAL              :: frim_qs, frim_qg
     REAL, ALLOCATABLE :: hfl_3dpatch(:, :, :)
+    REAL, ALLOCATABLE :: qnc_ini_3dpatch(:, :, :)
     REAL, ALLOCATABLE :: qr_ini_3dpatch(:, :, :)
+    REAL, ALLOCATABLE :: qnr_ini_3dpatch(:, :, :)
     REAL, ALLOCATABLE :: qs_ini_3dpatch(:, :, :)
     REAL, ALLOCATABLE :: qg_ini_3dpatch(:, :, :)
+    REAL, ALLOCATABLE :: qitot_ini_3dpatch(:, :, :, :)
+    REAL, ALLOCATABLE :: qnitot_ini_3dpatch(:, :, :, :)
+    REAL, ALLOCATABLE :: qirim_ini_3dpatch(:, :, :, :)
+    REAL, ALLOCATABLE :: birim_ini_3dpatch(:, :, :, :)
+    REAL, ALLOCATABLE :: qzitot_ini_3dpatch(:, :, :, :)
+    REAL, ALLOCATABLE :: qiliq_ini_3dpatch(:, :, :, :)
 
     TYPE(t_icon_tracer_3dptr) :: icon_tracer_3d
     TYPE(t_p3_tracer_3dptr)   :: p3_tracer_3d(n_icecat)
@@ -53,7 +62,7 @@ CONTAINS
     IF (rank == 0) WRITE (0,*) 'call p3_init'
 
     CALL p3_init(TRIM(lookup_tables_path), n_icecat, l3mom_ice, lliqfrac, model, stat, abort_on_err, dowr)
-    IF (stat /= status_ok) CALL comin_plugin_finish('call_p3_init (p3plugin)', 'failed!')
+    IF (stat /= status_ok) CALL comin_plugin_finish('init_p3_and_tracer (p3plugin)', 'calling failed!')
 
     dtime = comin_descrdata_get_timesteplength(1)
     fastphystep = 1
@@ -79,7 +88,11 @@ CONTAINS
     END DO
 
 
-    IF (ihydrometeor_ini == 1) THEN
+    SELECT CASE (itracer_ini)
+    CASE (0)
+      IF (rank == 0) WRITE (0,*) 'initialize without clouds and precipitation, "dry"'
+
+    CASE (1)
       IF (rank == 0) WRITE (0,*) 'initialize from 1M-scheme mass tracers qc, qr, qi, qs and if available qg'
 
       dmean_qc    = 15.e-6   ! number-mean diameter in m
@@ -121,10 +134,95 @@ CONTAINS
       ELSE
         IF (rank == 0) WRITE (0,*) 'did not find tracer qg in tracer_ini_filename, initialize P3 ice with qi & qs only'
       ENDIF
-    ENDIF
 
-    !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of ' // TRIM(varname)
-    !IF (rank == 0) WRITE (0,'(a,F10.5,F10.5)') 'min max:', minval(qc_ini_3d(:,120)), maxval(qc_ini_3d(:,120))
+    CASE (3)
+      IF (rank == 0) WRITE (0,*) 'initialize from P3 tracers'
+
+      ALLOCATE(hfl_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
+      ALLOCATE(qnc_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
+      ALLOCATE(qr_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
+      ALLOCATE(qnr_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
+
+      CALL dyn_vars%hfl%to_3d(dyn_vars_3d%hfl)
+      hfl_3dpatch = dyn_vars_3d%hfl
+
+      CALL read_vinterp_ini_var(tracer_ini_filename, 'qnc', hfl_3dpatch, qnc_ini_3dpatch)
+      CALL read_vinterp_ini_var(tracer_ini_filename, 'QR', hfl_3dpatch, qr_ini_3dpatch)
+      CALL read_vinterp_ini_var(tracer_ini_filename, 'qnr', hfl_3dpatch, qnr_ini_3dpatch)
+
+      n_icecat_ini = 0
+      DO i_icecat = 1, n_icecat
+        WRITE(icecat_name, '(a,i0)') 'qitot_', i_icecat
+        CALL query_file_for_var(tracer_ini_filename, TRIM(icecat_name), lvarfound)
+        IF (lvarfound) n_icecat_ini = i_icecat
+      END DO
+
+      IF (rank == 0) WRITE (0,'(a,i0)') 'found number of P3 ice categories in tracer_ini_filename: ', n_icecat_ini
+      IF (n_icecat < n_icecat_ini) THEN
+        IF (rank == 0) WRITE (0,*) 'found more ini P3 ice categories than used in this model run, will ignore additional fields'
+      ELSE IF (n_icecat > n_icecat_ini) THEN
+        IF (n_icecat_ini == 0) CALL comin_plugin_finish('init_p3_and_tracer (p3plugin)', 'found no P3 ice categories!')
+        IF (rank == 0) WRITE (0,*) 'found less P3 ice categories than used in this model run, will initialize the rest empty'
+      ENDIF
+
+      l3mom_ice_ini = .FALSE.
+      IF (l3mom_ice) THEN
+        CALL query_file_for_var(tracer_ini_filename, 'qzitot_1', lvarfound)
+        IF (lvarfound) THEN
+          l3mom_ice_ini = .TRUE.
+          IF (rank == 0) WRITE (0,*) 'found qzitot, reading it in...'
+        ELSE
+          IF (rank == 0) WRITE (0,*) 'did not find qzitot, leaving it zero...'
+        ENDIF
+      ENDIF
+
+      lliqfrac_ini = .FALSE.
+      IF (lliqfrac) THEN
+        CALL query_file_for_var(tracer_ini_filename, 'qiliq_1', lvarfound)
+        IF (lvarfound) THEN
+          lliqfrac_ini = .TRUE.
+          IF (rank == 0) WRITE (0,*) 'found qiliq, reading it in...'
+        ELSE
+          IF (rank == 0) WRITE (0,*) 'did not find qiliq, leaving it zero...'
+        ENDIF
+      ENDIF
+
+      ALLOCATE(qitot_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat_ini))
+      ALLOCATE(qnitot_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat_ini))
+      ALLOCATE(qirim_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat_ini))
+      ALLOCATE(birim_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat_ini))
+      IF (l3mom_ice_ini) THEN
+        ALLOCATE(qzitot_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat_ini))
+      ENDIF
+      IF (l3mom_ice_ini) THEN
+        ALLOCATE(qiliq_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat_ini))
+      ENDIF
+
+      DO i_icecat = 1, n_icecat_ini
+        WRITE(icecat_name, '(a,i0)') 'qitot_', i_icecat
+        CALL read_vinterp_ini_var(tracer_ini_filename, icecat_name, hfl_3dpatch, qitot_ini_3dpatch(:, :, :, i_icecat))
+
+        WRITE(icecat_name, '(a,i0)') 'qnitot_', i_icecat
+        CALL read_vinterp_ini_var(tracer_ini_filename, icecat_name, hfl_3dpatch, qnitot_ini_3dpatch(:, :, :, i_icecat))
+
+        WRITE(icecat_name, '(a,i0)') 'qirim_', i_icecat
+        CALL read_vinterp_ini_var(tracer_ini_filename, icecat_name, hfl_3dpatch, qirim_ini_3dpatch(:, :, :, i_icecat))
+
+        WRITE(icecat_name, '(a,i0)') 'birim_', i_icecat
+        CALL read_vinterp_ini_var(tracer_ini_filename, icecat_name, hfl_3dpatch, birim_ini_3dpatch(:, :, :, i_icecat))
+
+        IF (l3mom_ice_ini) THEN
+          WRITE(icecat_name, '(a,i0)') 'qzitot_', i_icecat
+          CALL read_vinterp_ini_var(tracer_ini_filename, icecat_name, hfl_3dpatch, qzitot_ini_3dpatch(:, :, :, i_icecat))
+        ENDIF
+
+        IF (l3mom_ice_ini) THEN
+          WRITE(icecat_name, '(a,i0)') 'qiliq_', i_icecat
+          CALL read_vinterp_ini_var(tracer_ini_filename, icecat_name, hfl_3dpatch, qiliq_ini_3dpatch(:, :, :, i_icecat))
+        ENDIF
+      END DO
+
+    END SELECT
 
 
     jg = 1
@@ -142,7 +240,7 @@ CONTAINS
       DO jk = 1, p_patch%nlev
         DO jc = i_startidx, i_endidx
 
-          SELECT CASE (ihydrometeor_ini)
+          SELECT CASE (itracer_ini)
           CASE (0)
             ! initialization of warm phase:
             ! qv, qc, qr were already loaded and set in initicon if in ini file, therefore reset qc, qr to zero
@@ -252,6 +350,52 @@ CONTAINS
 
             IF (n_icecat > 3) THEN
               DO i_icecat = 4, n_icecat
+                p3_tracer_3d(i_icecat)%qitot(jc,jk,jb) = 0.0
+                p3_tracer_3d(i_icecat)%qnitot(jc,jk,jb) = 0.0
+                p3_tracer_3d(i_icecat)%qirim(jc,jk,jb) = 0.0
+                p3_tracer_3d(i_icecat)%birim(jc,jk,jb) = 0.0
+                IF (l3mom_ice) THEN
+                  p3_tracer_3d(i_icecat)%qzitot(jc,jk,jb) = 0.0
+                ENDIF
+                IF (lliqfrac) THEN
+                  p3_tracer_3d(i_icecat)%qiliq(jc,jk,jb) = 0.0
+                ENDIF
+              END DO
+            ENDIF
+
+          CASE (3)
+            ! initialization of warm phase:
+            ! qv, qc were already read from file and set in initicon
+
+            icon_tracer_3d%qnc(jc,jk,jb) = qnc_ini_3dpatch(jc,jk,jb)
+            icon_tracer_3d%qr(jc,jk,jb) = qr_ini_3dpatch(jc,jk,jb)
+            icon_tracer_3d%qnr(jc,jk,jb) = qnr_ini_3dpatch(jc,jk,jb)
+
+            ! initialization of cold phase:
+            ! use read in P3 tracers, leave additional categories empty
+            DO i_icecat = 1, n_icecat_ini
+              p3_tracer_3d(i_icecat)%qitot(jc,jk,jb) = qitot_ini_3dpatch(jc,jk,jb,i_icecat)
+              p3_tracer_3d(i_icecat)%qnitot(jc,jk,jb) = qnitot_ini_3dpatch(jc,jk,jb,i_icecat)
+              p3_tracer_3d(i_icecat)%qirim(jc,jk,jb) = qirim_ini_3dpatch(jc,jk,jb,i_icecat)
+              p3_tracer_3d(i_icecat)%birim(jc,jk,jb) = birim_ini_3dpatch(jc,jk,jb,i_icecat)
+              IF (l3mom_ice) THEN
+                IF (l3mom_ice_ini) THEN
+                  p3_tracer_3d(i_icecat)%qzitot(jc,jk,jb) = qzitot_ini_3dpatch(jc,jk,jb,i_icecat)
+                ELSE
+                  p3_tracer_3d(i_icecat)%qzitot(jc,jk,jb) = 0.0
+                ENDIF
+              ENDIF
+              IF (lliqfrac) THEN
+                IF (lliqfrac_ini) THEN
+                  p3_tracer_3d(i_icecat)%qiliq(jc,jk,jb) = qiliq_ini_3dpatch(jc,jk,jb,i_icecat)
+                ELSE
+                  p3_tracer_3d(i_icecat)%qiliq(jc,jk,jb) = 0.0
+                ENDIF
+              ENDIF
+            END DO
+
+            IF (n_icecat > n_icecat_ini) THEN
+              DO i_icecat = n_icecat_ini + 1, n_icecat
                 p3_tracer_3d(i_icecat)%qitot(jc,jk,jb) = 0.0
                 p3_tracer_3d(i_icecat)%qnitot(jc,jk,jb) = 0.0
                 p3_tracer_3d(i_icecat)%qirim(jc,jk,jb) = 0.0
