@@ -177,8 +177,9 @@
 
 !------------------------------------------------------------------------------------------!
 
- read_path = lookup_file_dir           ! path for lookup tables from official model library
+!read_path = lookup_file_dir           ! path for lookup tables from official model library
 !read_path = '/MY/LOOKUP_TABLE/PATH'   ! path for lookup tables from user-specified location
+ read_path = '/fs/homeu2/eccc/mrd/ords/armp/jam003/p3_lookup_tables'
 
  if (trplMomI) then
    lookup_file_1 = trim(read_path)//'/'//'p3_lookupTable_1.dat-v'//trim(version_intended_table_1_3mom)
