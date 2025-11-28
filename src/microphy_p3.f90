@@ -27,7 +27,7 @@
 !    https://github.com/P3-microphysics/P3-microphysics                                    !
 !__________________________________________________________________________________________!
 !                                                                                          !
-! Version:       5.5.0-rc12+                                                               !
+! Version:       5.5.0-rc13                                                                !
 ! Last updated:  2025 Nov                                                                  !
 !__________________________________________________________________________________________!
 
@@ -155,7 +155,7 @@
 
 ! Local variables and parameters:
  logical, save                  :: is_init = .false.
- character(len=1024), parameter :: version_p3                    = '5.5.0-rc12+'
+ character(len=1024), parameter :: version_p3                    = '5.5.0-rc13'
  character(len=1024), parameter :: version_intended_table_1_2mom = '6.9-2momI'
  character(len=1024), parameter :: version_intended_table_1_3mom = '6.9-3momI'
  character(len=1024), parameter :: version_intended_table_2      = '6.2'
@@ -179,7 +179,7 @@
 
 !read_path = lookup_file_dir           ! path for lookup tables from official model library
 !read_path = '/MY/LOOKUP_TABLE/PATH'   ! path for lookup tables from user-specified location
- read_path = '/fs/homeu2/eccc/mrd/ords/armp/jam003/p3_lookup_tables'
+ read_path = '/fs/homeu2/eccc/mrd/ords/armp/jam003/p3_lookup_tables'  !*** TO BE REMOVED ***
 
  if (trplMomI) then
    lookup_file_1 = trim(read_path)//'/'//'p3_lookupTable_1.dat-v'//trim(version_intended_table_1_3mom)
@@ -1156,19 +1156,19 @@ END subroutine p3_init
 !==================================================================================================!
 #ifdef ECCCGEM
 
- function mp_p3_wrapper_gem(ttend,qtend,qctend,qrtend,qitend,                                       &
-                              qvap_m,qvap,temp_m,temp,dt,dt_max,ww,psfc,gztherm,gzmom,sigma,kount,  &
-                              ni,nk,prt_liq,prt_sol,prt_drzl,prt_rain,prt_crys,prt_snow,            &
-                              prt_grpl,prt_pell,prt_hail,prt_sndp,prt_wsnow,diag_Zet,diag_Zec,      &
-                              diag_effc,qc_m,qc,nc,qr_m,qr,nr,n_diag_2d,diag_2d,n_diag_3d,diag_3d,  &
-                              clbfact_dep,clbfact_sub,debug_on,supidth,diag_hcb,diag_hsn,diag_vis,  &
-                              diag_vis1,diag_vis2,diag_vis3,diag_slw,                               &
-                              scpf_on,scpf_pfrac,scpf_resfact,cldfrac,maxD_hail,                    &
-                              qi_type_1,qi_type_2,qi_type_3,qi_type_4,qi_type_5,qi_type_6,          &
-                              qitot_1m,qitot_1,qirim_1,nitot_1,birim_1,diag_effi_1,zitot_1,qiliq_1, &
-                              qitot_2m,qitot_2,qirim_2,nitot_2,birim_2,diag_effi_2,zitot_2,qiliq_2, &
-                              qitot_3m,qitot_3,qirim_3,nitot_3,birim_3,diag_effi_3,zitot_3,qiliq_3, &
-                              qitot_4m,qitot_4,qirim_4,nitot_4,birim_4,diag_effi_4,zitot_4,qiliq_4) &
+ function mp_p3_wrapper_gem(ttend,qtend,qctend,qrtend,qitend,                                        &
+                              qvap_m,qvap,temp_m,temp,dt,dt_max,ww,psfc,gztherm,gzmom,sigma,kount,   &
+                              ni,nk,prt_liq,prt_sol,prt_drzl,prt_rain,prt_crys,prt_snow,             &
+                              prt_grpl,prt_pell,prt_hail,prt_sndp,prt_wsnow,diag_Zet,diag_Zec,       &
+                              diag_effc,qc_m,qc,nc,qr_m,qr,nr,n_diag_2d,diag_2d,n_diag_3d,diag_3d,   &
+                              clbfact_dep,clbfact_sub,debug_on,supdepthr,diag_hcb,diag_hsn,          &
+                              diag_vis,diag_vis1,diag_vis2,diag_vis3,diag_slw,                       &
+                              scpf_on,scpf_pfrac,scpf_resfact,cldfrac,freq3Ddiag_gem,maxD_hail,      &
+                              qi_type_1,qi_type_2,qi_type_3,qi_type_4,qi_type_5,qi_type_6,           &
+                              qitot_1m,qitot_1,qirim_1,nitot_1,birim_1,diag_effi_1,zitot_1,qiliq_1,  &
+                              qitot_2m,qitot_2,qirim_2,nitot_2,birim_2,diag_effi_2,zitot_2,qiliq_2,  &
+                              qitot_3m,qitot_3,qirim_3,nitot_3,birim_3,diag_effi_3,zitot_3,qiliq_3,  &
+                              qitot_4m,qitot_4,qirim_4,nitot_4,birim_4,diag_effi_4,zitot_4,qiliq_4)  &
                               result(end_status)
 
 !------------------------------------------------------------------------------------------!
@@ -1195,7 +1195,7 @@ END subroutine p3_init
  real, intent(in)                       :: dt_max                ! maximum timestep for microphysics   s
  real, intent(in)                       :: clbfact_dep           ! calibration factor for deposition
  real, intent(in)                       :: clbfact_sub           ! calibration factor for sublimation
- real, intent(in)                       :: supidth               ! ice supersaturation threshold for deposition
+ real, intent(in)                       :: supdepthr             ! ice supersaturation threshold for deposition
 
  real, intent(inout), dimension(ni,nk)  :: qc                    ! cloud specific ratio, mass            kg kg-1
  real, intent(inout), dimension(ni,nk)  :: nc                    ! cloud specific ratio, number          #  kg-1
@@ -1240,20 +1240,20 @@ END subroutine p3_init
  real, dimension(:,:), pointer, contiguous  :: zitot_4           ! ice   specific ratio, reflectivity    m^6 kg-1
  real, dimension(:,:), pointer, contiguous  :: qiliq_4           ! ice   specific ratio, mass (liquid)   kg kg-1
 
- real, intent(out), dimension(ni,nk) :: ttend                    ! temperature tendency                K s-1
- real, intent(out), dimension(ni,nk) :: qtend                    ! moisture tendency                   kg kg-1 s-1
- real, intent(out), dimension(ni,nk) :: qctend                   ! cloud water tendency                kg kg-1 s-1
- real, intent(out), dimension(ni,nk) :: qrtend                   ! cloud water tendency                kg kg-1 s-1
- real, intent(out), dimension(ni,nk) :: qitend                   ! total ice tendency                  kg kg-1 s-1
+ real, intent(out), dimension(ni,nk)    :: ttend                 ! temperature tendency                K s-1
+ real, intent(out), dimension(ni,nk)    :: qtend                 ! moisture tendency                   kg kg-1 s-1
+ real, intent(out), dimension(ni,nk)    :: qctend                ! cloud water tendency                kg kg-1 s-1
+ real, intent(out), dimension(ni,nk)    :: qrtend                ! cloud water tendency                kg kg-1 s-1
+ real, intent(out), dimension(ni,nk)    :: qitend                ! total ice tendency                  kg kg-1 s-1
 
- real, intent(in),    dimension(ni,nk)  :: qvap_m                ! vapor mixing ratio (previous time) kg kg-1
- real, intent(inout), dimension(ni,nk)  :: qvap                  ! vapor mixing ratio, mass           kg kg-1
+ real, intent(in),    dimension(ni,nk)  :: qvap_m                ! vapor mixing ratio (previous time)  kg kg-1
+ real, intent(inout), dimension(ni,nk)  :: qvap                  ! vapor mixing ratio, mass            kg kg-1
  real, intent(in),    dimension(ni,nk)  :: temp_m                ! temperature (previous time step)    K
  real, intent(inout), dimension(ni,nk)  :: temp                  ! temperature                         K
  real, intent(in),    dimension(ni)     :: psfc                  ! surface air pressure                Pa
  real, intent(in),    dimension(ni,nk)  :: gztherm               ! height AGL of thermodynamic levels  m
- real, intent(in),    dimension(ni,nk)  :: gzmom                 ! height AGL of momentum levels  m
- real, intent(in),    dimension(ni,nk)  :: sigma                 ! sigma = p(k,:)/psfc(:)
+ real, intent(in),    dimension(ni,nk)  :: gzmom                 ! height AGL of momentum levels       m
+ real, intent(in),    dimension(ni,nk)  :: sigma                 ! sigma = p(k,:)/psfc(:)              -
  real, intent(in),    dimension(ni,nk)  :: ww                    ! vertical motion                     m s-1
  real, intent(out),   dimension(ni)     :: prt_liq               ! precipitation rate, total liquid    m s-1
  real, intent(out),   dimension(ni)     :: prt_sol               ! precipitation rate, total solid     m s-1
@@ -1294,6 +1294,7 @@ END subroutine p3_init
  logical, intent(in)                    :: scpf_on               ! switch for activation of SCPF scheme
  real,    intent(in)                    :: scpf_pfrac            ! precipitation fraction factor (SCPF)
  real,    intent(in)                    :: scpf_resfact          ! model resolution factor (SCPF)
+ real,    intent(in)                    :: freq3Ddiag_gem        ! frequency (min) for full-column diagnostics
  real,    intent(out), dimension(ni,nk) :: cldfrac               ! cloud fraction computed by SCPF
 
 !----------------------------------------------------------------------------------------!
@@ -1340,7 +1341,7 @@ END subroutine p3_init
  logical                 :: log_tmp1,log_tmp2,log_trplMomI,log_liqFrac
  logical, parameter      :: log_predictNc  = .true.     ! temporary; to be put as GEM namelist
  real, parameter         :: SMALL_ICE_MASS = 1e-14      ! threshold for very small specific ice content
- real, parameter         :: freq3Ddiag_gem = 60.        ! frequency (min) for full-column diagnostics
+!real, parameter         :: freq3Ddiag_gem = 60.        ! frequency (min) for full-column diagnostics
 
  character(len=16), parameter :: model = 'GEM'
 
@@ -1556,7 +1557,7 @@ END subroutine p3_init
                   diag_vis2      = diag_vis2,                                                  &
                   diag_vis3      = diag_vis3,                                                  &
                   diag_dhmax     = diag_dhmax,                                                 &
-                  supi_nuc_in    = supidth,                                                    &
+                  supi_nuc_in    = supdepthr,                                                  &
                   freq3Ddiag_in  = freq3Ddiag_gem)
 
       if (global_status /= STATUS_OK) return

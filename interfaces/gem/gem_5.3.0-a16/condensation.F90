@@ -62,7 +62,7 @@ contains
 
 #define PHYPTRDCL
 #include "condensation_ptr.hf"
-      
+
       !----------------------------------------------------------------
       call msg_toall(MSG_DEBUG, 'condensation [BEGIN]')
 
@@ -73,7 +73,7 @@ contains
 #include "condensation_ptr.hf"
 
       ! Initialize local variables
-      call init2nan(iwc_total, lttp, lhup, slw)  
+      call init2nan(iwc_total, lttp, lhup, slw)
       call init2nan(qtl, qts, fdqc)
       call init2nan(l_en0, l_pw0)
 
@@ -81,11 +81,11 @@ contains
       if (kount == 0) then
          if (.not.ISPHYIN('rhc')) zrhc(:,:) = -1.
       endif
-      
+
       ! Local initializations
       if (associated(a_tls_fr1)) a_tls_fr1 = 0.
       if (associated(a_tls_fr2)) a_tls_fr2 = 0.
-      
+
       ! Pre-scheme state for budget
       if (pb_compute(zconecnd, zconqcnd, l_en0, l_pw0, &
            pvars, nkm1) /= PHY_OK) then
@@ -101,7 +101,7 @@ contains
          ! Simple Kessler-based condensation scheme
          call kessler(zste, zsqe, zsqce, zsqre, a_tls, &
               ttp, qqp, qcp, qrp, zgztherm, sigma, psp, dt)
-  
+
       case('CONSUN')
 
          ! Sundqvist-based condensation scheme
@@ -123,7 +123,7 @@ contains
 
          ! Pre-microphysics condensation adjustment
          call sc_adjust(ztcondc1, zqcondc1, zqccondc1, pvars, delt, ni, nkm1)
-         
+
          ! Sundqvist-based microphysics scheme
          call s2(zste, zsqe, zsqce, a_tls, a_tss, a_fxp, zrhc, &
               ttp, ttm, qqp, qqm, qcp, qcm, &
@@ -132,10 +132,10 @@ contains
               zmrk2, ni, nkm1)
 
       case('MP_MY2')
-         
+
          ! Milbrandt-Yau 2-moment microphysics
-         call mp_my2_main(zste, zsqe, zsqce, zsqre, &
-              ww,ttp,qqp,qcp,qrp,qip,qnp,qgp,qhp,ncp,nrp,nip,nnp,ngp,nhp,a_nwfa,     &
+         call mp_my2_main(zste, zsqe, zsqce, zsqre,                                              &
+              ww,ttp,qqp,qcp,qrp,qip,qnp,qgp,qhp,ncp,nrp,nip,nnp,ngp,nhp,a_nwfa,                 &
               psp, sigma, a_tls, a_tls_rn1, a_tls_rn2, a_tls_fr1, a_tls_fr2, a_tss, a_tss_sn1,   &
               a_tss_sn2, a_tss_sn3, a_tss_pe1, a_tss_pe2, a_tss_pe2l, a_tss_snd,dt, ni, nkm1, 1, &
               kount, mp_aeroact, my_ccntype, my_diagon, my_sedion, my_warmon, my_rainon,         &
@@ -143,18 +143,18 @@ contains
               diag_3d, a_effradc, a_effradi1, a_effradi2, a_effradi3, a_effradi4, a_fxp,         &
               NK_BOTTOM)
          if (phy_error_L) return
-          
+
       case('MP_P3V3')
-         
+
          ! Predicted Particle Properties (P3) microphysics
-         istat1 = mp_p3v3_wrapper_gem(zste,zsqe,zsqce,zsqre,qitend, &
-              qqm,qqp,ttm,ttp,dt,p3_dtmax,ww,psp,zgztherm,sigma,   &
-              kount,ni,nkm1,a_tls,a_tss,a_tls_rn1,a_tls_rn2,a_tss_sn1,          &
+         istat1 = mp_p3v3_wrapper_gem(zste,zsqe,zsqce,zsqre,qitend,                   &
+              qqm,qqp,ttm,ttp,dt,p3_dtmax,ww,psp,zgztherm,sigma,                      &
+              kount,ni,nkm1,a_tls,a_tss,a_tls_rn1,a_tls_rn2,a_tss_sn1,                &
               a_tss_sn2,a_tss_sn3,a_tss_pe1,a_tss_pe2,a_tss_snd,a_zet,a_zec,          &
-              a_effradc,qcp,ncp,qrp,nrp,N_DIAG_2D,diag_2d,N_DIAG_3D,diag_3d,  &
-              p3_depfact,p3_subfact,p3_debug,a_h_cb,a_h_sn,a_vis,a_vis1,      &
-              a_vis2,a_vis3,slw,p3_scpf_on,p3_pfrac,p3_resfact,a_fxp,               &
-              a_qi_1,a_qi_2,a_qi_3,a_qi_4,a_qi_5,a_qi_6, &
+              a_effradc,qcp,ncp,qrp,nrp,N_DIAG_2D,diag_2d,N_DIAG_3D,diag_3d,          &
+              p3_depfact,p3_subfact,p3_debug,a_h_cb,a_h_sn,a_vis,a_vis1,              &
+              a_vis2,a_vis3,slw,p3_scpf_on,p3_pfrac,p3_resfact,a_fxp,                 &
+              a_qi_1,a_qi_2,a_qi_3,a_qi_4,a_qi_5,a_qi_6,                              &
               qti1p,qmi1p,nti1p,bmi1p,a_effradi1,qti2p,qmi2p,nti2p,bmi2p,a_effradi2,  &
               qti3p,qmi3p,nti3p,bmi3p,a_effradi3,qti4p,qmi4p,nti4p,bmi4p,a_effradi4)
          if (istat1 /= P3_OK) then
@@ -169,24 +169,24 @@ contains
                  'Cannot correct conservation for '//trim(stcond))
             return
          endif
-         
+
       case('MP_P3')
-         
+
          ! Predicted Particle Properties (P3) microphysics
-         istat1 = mp_p3_wrapper_gem(zste,zsqe,zsqce,zsqre,qitend,                                                          &
-              qqm,qqp,ttm,ttp,dt,p3_dtmax,ww,psp,zgztherm,zgzmom,sigma,                                                    &
-              kount,ni,nkm1,a_tls,a_tss,a_tls_rn1,a_tls_rn2,a_tss_sn1,                                                     &
-              a_tss_sn2,a_tss_sn3,a_tss_pe1,a_tss_pe2,a_tss_snd,a_tss_ws,                                                  &
-              a_zet,a_zec,a_effradc,qcm,qcp,ncp,qrm,qrp,nrp,N_DIAG_2D,diag_2d,N_DIAG_3D,diag_3d,                           &
-              p3_depfact,p3_subfact,p3_debug,p3_supid,a_h_cb,a_h_sn,a_vis,a_vis1,                                                   &
-              a_vis2,a_vis3,slw,p3_scpf_on,p3_pfrac,p3_resfact,a_fxp,a_diag_dhmax,                             &
-              a_qi_1,a_qi_2,a_qi_3,a_qi_4,a_qi_5,a_qi_6,                                                                   &
-              qti1m,qti1p,qmi1p,nti1p,bmi1p,a_effradi1,zitot_1=zti1p,qiliq_1=qli1p,                                        &
+         istat1 = mp_p3_wrapper_gem(zste,zsqe,zsqce,zsqre,qitend,                                                                         &
+              qqm,qqp,ttm,ttp,dt,p3_dtmax,ww,psp,zgztherm,zgzmom,sigma,                                                                   &
+              kount,ni,nkm1,a_tls,a_tss,a_tls_rn1,a_tls_rn2,a_tss_sn1,                                                                    &
+              a_tss_sn2,a_tss_sn3,a_tss_pe1,a_tss_pe2,a_tss_snd,a_tss_ws,                                                                 &
+              a_zet,a_zec,a_effradc,qcm,qcp,ncp,qrm,qrp,nrp,N_DIAG_2D,diag_2d,N_DIAG_3D,diag_3d,                                          &
+              p3_depfact,p3_subfact,p3_debug,p3_supdepthr,a_h_cb,a_h_sn,a_vis,a_vis1,                                                     &
+              a_vis2,a_vis3,slw,p3_scpf_on,p3_pfrac,p3_resfact,a_fxp,p3_freq3Ddiag,a_diag_dhmax,                                          &
+              a_qi_1,a_qi_2,a_qi_3,a_qi_4,a_qi_5,a_qi_6,                                                                                  &
+              qti1m,qti1p,qmi1p,nti1p,bmi1p,a_effradi1,zitot_1=zti1p,qiliq_1=qli1p,                                                       &
               qitot_2m=qti2m,qitot_2=qti2p,qirim_2=qmi2p,nitot_2=nti2p,birim_2=bmi2p,diag_effi_2=a_effradi2,zitot_2=zti2p,qiliq_2=qli2p,  &
               qitot_3m=qti3m,qitot_3=qti3p,qirim_3=qmi3p,nitot_3=nti3p,birim_3=bmi3p,diag_effi_3=a_effradi3,zitot_3=zti3p,qiliq_3=qli3p,  &
               qitot_4m=qti4m,qitot_4=qti4p,qirim_4=qmi4p,nitot_4=nti4p,birim_4=bmi4p,diag_effi_4=a_effradi4,zitot_4=zti4p,qiliq_4=qli4p)
          if (istat1 /= P3_OK) then
-            call physeterror('condensation', 'Error returned by P3 gem wrapper') 
+            call physeterror('condensation', 'Error returned by P3 gem wrapper')
            return
          endif
 
@@ -199,7 +199,7 @@ contains
          endif
 
       case('THOMPSON')
-         
+
          istat1 = thompson_wrapper_gem(pvars,&
               thompson_dt_inner,thompson_sedi_semilag_L,thompson_decfl,&
               thompson_cldfrac,ni,nkm1,qqp,qcp,qrp,qip,qnp,qgp,nip,nrp,&
@@ -207,7 +207,7 @@ contains
               a_tls,a_tss,zste,zsqe,zsqce,zsqre,qitend,a_fxp)
 
          if (istat1 /= THOMPSON_OK) then
-            call physeterror('condensation', 'Error returned by thompson_wrapper_gem') 
+            call physeterror('condensation', 'Error returned by thompson_wrapper_gem')
            return
         endif
 
@@ -218,11 +218,11 @@ contains
                  'Cannot correct conservation for '//trim(stcond))
             return
          endif
-        
+
       CASE DEFAULT
            call physeterror('condensation','Error stcond='//stcond//' not valid')
            return
-           
+
       end select GRIDSCALE_SCHEME
 
       ! Split diagnostic tables into the bus
@@ -293,7 +293,7 @@ contains
          call physeterror('condensation', 'Problem computing final budget')
          return
       endif
-      
+
       ! Compute profile diagnostics <<< should be done outside the model >>>
       istat1 = mp_lwc(qtl, pvars)
       istat2 = mp_iwc(qts, pvars)
@@ -309,7 +309,7 @@ contains
       !----------------------------------------------------------------
       return
    end subroutine condensation4
-    
+
 !!$   subroutine priv_check_negative(F_fld, F_minval, F_name)
 !!$      implicit none
 !!$      real, pointer, contiguous :: F_fld(:,:)

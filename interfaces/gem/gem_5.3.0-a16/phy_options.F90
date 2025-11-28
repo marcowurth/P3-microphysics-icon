@@ -53,7 +53,7 @@ module phy_options
    integer           :: acchr        = 0
    namelist /physics_cfgs/ acchr
    namelist /physics_cfgs_p/ acchr
-   
+
    !# Turbulent kinetic energy advect. is active if .true.
    logical           :: advectke     = .false.
    namelist /physics_cfgs/ advectke
@@ -89,7 +89,7 @@ module phy_options
    real           :: cond_iceacc    = 5.
    namelist /physics_cfgs/ cond_iceacc
    namelist /physics_cfgs_p/ cond_iceacc
-   
+
    !# Minimum cloud mixing ratio (kg/kg) for autoconversion in
    !# Sunqvist gridscale condensation
    real           :: cond_hmrst     = 3.e-4
@@ -127,12 +127,12 @@ module phy_options
    logical           :: cond_updatefn = .false.
    namelist /physics_cfgs/ cond_updatefn
    namelist /physics_cfgs_p/ cond_updatefn
-   
+
    !# Activate computing of all diags, requested for output or not.
    logical           :: debug_alldiag_L     = .false.
    namelist /physics_cfgs/ debug_alldiag_L
    namelist /physics_cfgs_p/ debug_alldiag_L
-   
+
    !# Run only the physics nml+init (skip input and step)
    logical           :: debug_initonly_L     = .false.
    namelist /physics_cfgs/ debug_initonly_L
@@ -250,7 +250,7 @@ module phy_options
    character(len=16) :: kntraduv_S     = ''
    namelist /physics_cfgs/ kntraduv_S
    namelist /physics_cfgs_p/ kntraduv_S
-   
+
    !# Add methane oxydation as source of humidity in the stratosphere if .true.
    logical           :: lmetox       = .false.
    namelist /physics_cfgs/ lmetox
@@ -300,10 +300,10 @@ module phy_options
    namelist /physics_cfgs/ p3_subfact
    namelist /physics_cfgs_p/ p3_subfact
 
-   !# Ice supersaturation threshold for deposition ice nucleation(P3)
-   real           :: p3_supid = 0.05
-   namelist /physics_cfgs/ p3_supid
-   namelist /physics_cfgs_p/ p3_supid
+   !# Ice supersaturation threshold for deposition ice nucleation (P3)
+   real           :: p3_supdepthr = 0.05
+   namelist /physics_cfgs/ p3_supdepthr
+   namelist /physics_cfgs_p/ p3_supdepthr
 
    !# switch for real-time debugging in microphysics (P3)
    logical         :: p3_debug = .false.
@@ -330,6 +330,11 @@ module phy_options
    namelist /physics_cfgs/ p3_pfrac
    namelist /physics_cfgs_p/ p3_pfrac
 
+   !#  frequency (min) for calculating 3D diagnostic output in microphysics (P3)
+   real           :: p3_freq3Ddiag = 60.
+   namelist /physics_cfgs/ p3_freq3Ddiag
+   namelist /physics_cfgs_p/ p3_freq3Ddiag
+
    !# model resolution factor used by SCPF in microphysics (P3)
    real           :: p3_resfact = 1.0
    namelist /physics_cfgs/ p3_resfact
@@ -339,22 +344,22 @@ module phy_options
    logical :: thompson_sedi_semilag_L = .true.
    namelist /physics_cfgs/ thompson_sedi_semilag_L
    namelist /physics_cfgs_p/ thompson_sedi_semilag_L
-   
+
    !# Deformation CFL (decfl) for microphysics Thompson
    integer :: thompson_decfl = 1
    namelist /physics_cfgs/ thompson_decfl
-   namelist /physics_cfgs_p/ thompson_decfl   
+   namelist /physics_cfgs_p/ thompson_decfl
 
    !# Inner time step for microphysics Thompson, default -1 fo model time step
    real :: thompson_dt_inner = -1.0
    namelist /physics_cfgs/ thompson_dt_inner
    namelist /physics_cfgs_p/ thompson_dt_inner
-   
+
    !# Cloud fraction composition for microphysics Thompson
    character(len=20) :: thompson_cldfrac = "liq_ice_snow"
    namelist /physics_cfgs/ thompson_cldfrac
    namelist /physics_cfgs_p/ thompson_cldfrac
-   
+
    !# Switch for aerosol activation scheme (1 = default, 2 = ARG + Aerosol climatology)
    integer           :: mp_aeroact = 1
    namelist /physics_cfgs/ mp_aeroact
@@ -422,7 +427,7 @@ module phy_options
    integer           :: nsloflux     = 0
    namelist /physics_cfgs/ nsloflux
    namelist /physics_cfgs_p/ nsloflux
-   
+
    !# Vector length physics memory space folding for openMP
    integer           :: p_runlgt     = -1
    namelist /physics_cfgs/ p_runlgt
@@ -432,13 +437,13 @@ module phy_options
    real              :: pbl_ae      = 0.07
    namelist /physics_cfgs/ pbl_ae
    namelist /physics_cfgs_p/ pbl_ae
-   
-   !# Time-averaging of transfer coefficient for momentum to reduce 2-dt 
+
+   !# Time-averaging of transfer coefficient for momentum to reduce 2-dt
    !# oscillations in fluxes
    logical           :: pbl_cmu_timeavg = .false.
    namelist /physics_cfgs/ pbl_cmu_timeavg
    namelist /physics_cfgs_p/ pbl_cmu_timeavg
-   
+
    !# Diffuse condensate fields
    logical           :: pbl_diff_condens = .false.
    namelist /physics_cfgs/ pbl_diff_condens
@@ -473,7 +478,7 @@ module phy_options
    real              :: pbl_dxref = -1.
    namelist /physics_cfgs/ pbl_dxref
    namelist /physics_cfgs_p/ pbl_dxref
-      
+
    !# Conservation corrections for PBL scheme
    !# * 'NIL ' : No conservation correction applied
    !# * 'TEND' : Temperature and moisture tendencies corrected
@@ -489,7 +494,7 @@ module phy_options
    logical           :: pbl_cucloud  = .true.
    namelist /physics_cfgs/ pbl_cucloud
    namelist /physics_cfgs_p/ pbl_cucloud
- 
+
    !# Class of stability functions (stable case) to use in the PBL
    !# * 'DELAGE97  ' : Use functions described by Delage (1997; BLM)
    !# * 'BELJAARS91' : Use functions described by Beljaars and Holtslag (1991; JAM)
@@ -550,7 +555,7 @@ module phy_options
    logical           :: pbl_progvar = .false.
    namelist /physics_cfgs/ pbl_progvar
    namelist /physics_cfgs_p/ pbl_progvar
-   
+
    !# Use the mixing length to average the Richardson number profile of (potentially)
    !# many layers to derive a "background" Ri estimate
    logical           :: pbl_ribkg    = .false.
@@ -786,10 +791,10 @@ module phy_options
    logical :: rad_lw = .true.
    namelist /physics_cfgs/ rad_lw
    namelist /physics_cfgs_p/ rad_lw
-   
+
    !# For calculation of DIAGNOSTIC low, mid and high TRUE and EFFECTIVE cloud covers in cldoppro and cldoppro_mp
-   !# TRUE:      rad_siglim(1)=limit between low and mid clouds in sigma; rad_siglim(2)=limit between mid and high clouds in sigma; 
-   !# EFFECTIVE: rad_siglim(3)=limit between low and mid clouds in sigma; rad_siglim(4)=limit between mid and high clouds in sigma; 
+   !# TRUE:      rad_siglim(1)=limit between low and mid clouds in sigma; rad_siglim(2)=limit between mid and high clouds in sigma;
+   !# EFFECTIVE: rad_siglim(3)=limit between low and mid clouds in sigma; rad_siglim(4)=limit between mid and high clouds in sigma;
    real, dimension(4) :: rad_siglim = (/0.7,0.4,0.7,0.4/)
    namelist /physics_cfgs/ rad_siglim
    namelist /physics_cfgs_p/ rad_siglim
@@ -803,9 +808,9 @@ module phy_options
    logical :: rad_sw = .true.
    namelist /physics_cfgs/ rad_sw
    namelist /physics_cfgs_p/ rad_sw
-   
+
    !# For calculation of DIAGNOSTIC low, mid and high TRUE cloud covers in cldoppro and cldoppro_mp with height criteria for Calipso-GOCCP
-   !# TRUE:      rad_zlim(1)=limit between low and mid clouds in height; rad_zlim(2)=limit between mid and high clouds in height; 
+   !# TRUE:      rad_zlim(1)=limit between low and mid clouds in height; rad_zlim(2)=limit between mid and high clouds in height;
    real, dimension(2) :: rad_zlim = (/3200.,6500./)
    namelist /physics_cfgs/ rad_zlim
    namelist /physics_cfgs_p/ rad_zlim
@@ -887,7 +892,7 @@ module phy_options
    real              :: rmscon_lat_weights(4) = (/ -1., -1., -1., -1. /)
    namelist /physics_cfgs/ rmscon_lat_weights
    namelist /physics_cfgs_p/ rmscon_lat_weights
-   
+
 
    !# water/ice phase for saturation calc. if .true.;
    !# water phase only for saturation calc. if .false.
@@ -906,7 +911,7 @@ module phy_options
    integer :: sfcflx_filter_iter = 1
    namelist /physics_cfgs/ sfcflx_filter_iter
    namelist /physics_cfgs_p/ sfcflx_filter_iter
-   
+
    !# Tuning factor for blocking height
    real              :: sgo_bhfac    = 1.5
    namelist /physics_cfgs/ sgo_bhfac
@@ -1017,7 +1022,7 @@ module phy_options
         'NIL  ', &
         'IRPCP'  &
         /)
- 
+
    !# Standard deviation length scale (gridpoints) of Gaussian smoother
    !# applied to RDPR, PR and TA before the application of Latent Heat Nudging
    !# No smoothing applied when -ve
@@ -1041,7 +1046,7 @@ module phy_options
    namelist /physics_cfgs/ lhn_stop_S
    namelist /physics_cfgs_p/ lhn_stop_S
 
-   !# To avoid shocking the model, LHN is turned on gradually 
+   !# To avoid shocking the model, LHN is turned on gradually
    !# this parameter controls how many time steps it takes (after lhn_timestep_start)
    !# for LHN to be fully active
    character(len=16) :: lhn_ramp_S = '10p'
