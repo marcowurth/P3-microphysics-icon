@@ -183,7 +183,8 @@ SUBROUTINE solve_em ( grid , config_flags  &
    LOGICAL :: leapfrog
    INTEGER :: l,kte,kk
    LOGICAL :: f_flux  ! flag for computing averaged fluxes in cu_gd
-   REAL    :: curr_secs, curr_secs2
+   REAL    :: curr_secs, curr_secs2, curr_mins2
+   REAL(8) :: curr_secs_r8, curr_secs2_r8
    INTEGER :: num_sound_steps
    INTEGER :: idex, jdex
    REAL    :: max_msft
@@ -198,6 +199,7 @@ SUBROUTINE solve_em ( grid , config_flags  &
 
    TYPE(WRFU_TimeInterval)                    :: tmpTimeInterval, tmpTimeInterval2
    REAL                                       :: real_time
+   REAL(8)                                    :: real_time_r8
    LOGICAL                                    :: adapt_step_flag
    LOGICAL                                    :: fill_w_flag
 
@@ -331,6 +333,9 @@ SUBROUTINE solve_em ( grid , config_flags  &
    tmpTimeInterval2 = domain_get_current_time ( grid ) - domain_get_start_time ( grid )
    curr_secs  = real_time(tmpTimeInterval)
    curr_secs2 = real_time(tmpTimeInterval2)
+   curr_secs_r8  = real_time_r8(tmpTimeInterval)
+   curr_secs2_r8 = real_time_r8(tmpTimeInterval2)
+   curr_mins2 = REAL( curr_secs2_r8 / 60.0d0 )
 
    old_dt = grid%dt   ! store old time step for flux averaging code at end of RK loop
 
@@ -811,7 +816,7 @@ BENCH_START(calc_p_rho_tim)
                              , ph_tendf, mu_tendf               &
                              , tke_tend                         &
                              , config_flags%use_adaptive_time_step &
-                             , curr_secs                        &
+                             , curr_secs, curr_mins2            &
                              , psim , psih , gz1oz0             &
                              , chklowq                          &
                              , cu_act_flag , hol , th_phy       &
@@ -3724,6 +3729,7 @@ BENCH_START(micro_driver_tim)
       &        ,P8W=p8w            ,P=p_phy            ,PI_PHY=pi_phy     &
       &        ,RHO=grid%rho       ,SPEC_ZONE=grid%spec_zone              &
       &        ,SR=grid%sr              ,TH=th_phy                        &
+      &        ,ssat=grid%ssat, ssati=grid%ssati                          &
       &        ,refl_10cm=grid%refl_10cm                                  & ! hm, 9/22/09 for refl
       &        ,vmi3d=grid%vmi3d                                          & ! for P3
       &        ,di3d=grid%di3d                                            & ! for P3
@@ -3757,7 +3763,7 @@ BENCH_START(micro_driver_tim)
       &        ,DGNUM4D=grid%dgnum4d,DGNUMWET4D=grid%dgnumwet4d           &
 !======================
 #endif
-      &        ,XLAND=grid%xland,SNOWH=grid%SNOW                           &  !PMA
+      &        ,XLAND=grid%xland,SNOWH=grid%SNOW,XICE=grid%XICE           &
       &        ,SPECIFIED=specified_bdy, CHANNEL_SWITCH=channel_bdy       &
       &        ,F_RAIN_PHY=grid%f_rain_phy                                &
       &        ,F_RIMEF_PHY=grid%f_rimef_phy                              &
@@ -3810,6 +3816,7 @@ BENCH_START(micro_driver_tim)
       &        , SNOWNC=grid%snownc, SNOWNCV=grid%snowncv                 &
       &        , GRAUPELNC=grid%graupelnc, GRAUPELNCV=grid%graupelncv     & ! for milbrandt2mom
       &        , HAILNC=grid%hailnc, HAILNCV=grid%hailncv                 &
+      &        , HAIL_MAXK1=grid%hail_maxk1,HAIL_MAX2D=grid%hail_max2d    &
       &        , W=grid%w_2, Z=grid%z, HT=grid%ht                         &
       &        , MP_RESTART_STATE=grid%mp_restart_state                   &
       &        , TBPVS_STATE=grid%tbpvs_state                             & ! etampnew
@@ -3853,20 +3860,24 @@ BENCH_START(micro_driver_tim)
       &        , QNI2_CURR=scalar(ims,kms,jms,P_QNI2), F_QNI2=F_QNI2      & ! for P3
       &        , QIR2_CURR=scalar(ims,kms,jms,P_QIR2), F_QIR2=F_QIR2      & ! for P3
       &        , QIB2_CURR=scalar(ims,kms,jms,P_QIB2), F_QIB2=F_QIB2      & ! for P3
+      &        , QIR3_CURR=scalar(ims,kms,jms,P_QIR3), F_QIR3=F_QIR3      & ! for P3
+      &        , QIB3_CURR=scalar(ims,kms,jms,P_QIB3), F_QIB3=F_QIB3      & ! for P3
+      &        , QIL_CURR=scalar(ims,kms,jms,P_QIL), F_QIL=F_QIL          & ! for P3
+      &        , QIL2_CURR=scalar(ims,kms,jms,P_QIL2), F_QIL2=F_QIL2      & ! for P3
+      &        , QIL3_CURR=scalar(ims,kms,jms,P_QIL3), F_QIL3=F_QIL3      & ! for P3
       &        , QVOLI2_CURR=scalar(ims,kms,jms,P_QVOLI2), F_QVOLI2=F_QVOLI2  & ! for Jensen ISHMAEL
       &        , QAOLI2_CURR=scalar(ims,kms,jms,P_QAOLI2), F_QAOLI2=F_QAOLI2  & ! for Jensen ISHMAEL
       &        , QI3_CURR=moist(ims,kms,jms,P_QI3), F_QI3=F_QI3           & ! for Jensen ISHMAEL
       &        , QNI3_CURR=scalar(ims,kms,jms,P_QNI3), F_QNI3=F_QNI3      & ! for Jensen ISHMAEL
       &        , QVOLI3_CURR=scalar(ims,kms,jms,P_QVOLI3), F_QVOLI3=F_QVOLI3  & ! for Jensen ISHMAEL
       &        , QAOLI3_CURR=scalar(ims,kms,jms,P_QAOLI3), F_QAOLI3=F_QAOLI3  & ! for Jensen ISHMAEL
-!       &        , QZR_CURR=scalar(ims,kms,jms,P_QZR), F_QZR=F_QZR          & ! for milbrandt3mom
-       &        , QZI_CURR=scalar(ims,kms,jms,P_QZI), F_QZI=F_QZI          & ! for 3-moment P3
-       &        , QIL_CURR=scalar(ims,kms,jms,P_QIL), F_QIL=F_QIL          & ! for P3-LF
-       &        , QZI2_CURR=scalar(ims,kms,jms,P_QZI2), F_QZI2=F_QZI2          & ! for 3-moment P3, 2-cat
-       &        , QIL2_CURR=scalar(ims,kms,jms,P_QIL2), F_QIL2=F_QIL2          & ! for P3-LF, 2-cat
+       &        , QZR_CURR=scalar(ims,kms,jms,P_QZR), F_QZR=F_QZR          & ! for milbrandt3mom
+       &        , QZI_CURR=scalar(ims,kms,jms,P_QZI), F_QZI=F_QZI              & ! for 3-moment P3
+       &        , QZI2_CURR=scalar(ims,kms,jms,P_QZI2), F_QZI2=F_QZI2          & ! for 3-moment P3
+       &        , QZI3_CURR=scalar(ims,kms,jms,P_QZI3), F_QZI3=F_QZI3          & ! for 3-moment P3       
 !     &        , QZS_CURR=scalar(ims,kms,jms,P_QZS), F_QZS=F_QZS          & ! "
-!       &        , QZG_CURR=scalar(ims,kms,jms,P_QZG), F_QZG=F_QZG          & ! "
-!       &        , QZH_CURR=scalar(ims,kms,jms,P_QZH), F_QZH=F_QZH          & ! "
+       &        , QZG_CURR=scalar(ims,kms,jms,P_QZG), F_QZG=F_QZG          & ! "
+       &        , QZH_CURR=scalar(ims,kms,jms,P_QZH), F_QZH=F_QZH          & ! "
       &        , QVOLG_CURR=scalar(ims,kms,jms,P_QVOLG), F_QVOLG=F_QVOLG    & ! for nssl_2mom
       &        , QVOLH_CURR=scalar(ims,kms,jms,P_QVOLH), F_QVOLH=F_QVOLH    & ! for nssl_2mom
       &        , QDCN_CURR=scalar(ims,kms,jms,P_QDCN), F_QDCN=F_QDCN      & ! for ntu3m
@@ -3979,7 +3990,10 @@ BENCH_START(micro_driver_tim)
       &        ,pert_thom_qc=config_flags%pert_thom_qc                   &
       &        ,pert_thom_qi=config_flags%pert_thom_qi                   &
       &        ,pert_thom_qs=config_flags%pert_thom_qs                   &
-      &        ,pert_thom_ni=config_flags%pert_thom_ni  )
+      &        ,pert_thom_ni=config_flags%pert_thom_ni					 &
+	  &		   ,cloudnc=grid%cloudnc 									 &
+	)
+
                                                                           
 BENCH_END(micro_driver_tim)
 
@@ -4008,6 +4022,7 @@ BENCH_START(moist_phys_end_tim)
        jts = max(grid%j_start(ij),jds)
        jte = min(grid%j_end(ij),jde-1)
 
+       IF ( config_flags%mp_zero_out > 0 ) THEN
        CALL microphysics_zero_outb (                                    &
                       moist , num_moist , config_flags ,                &
                       ids, ide, jds, jde, kds, kde,                     &
@@ -4015,6 +4030,7 @@ BENCH_START(moist_phys_end_tim)
                       its, ite, jts, jte,                               &
                       k_start    , k_end                                )
 
+       IF ( config_flags%mp_zero_out_all > 0 ) THEN
        CALL microphysics_zero_outb (                                    &
                       scalar , num_scalar , config_flags ,              &
                       ids, ide, jds, jde, kds, kde,                     &
@@ -4023,7 +4039,7 @@ BENCH_START(moist_phys_end_tim)
                       k_start    , k_end                                )
 
        CALL microphysics_zero_outb (                                    &
-                      chem , num_chem , config_flags ,              &
+                      chem , num_chem , config_flags ,                  &
                       ids, ide, jds, jde, kds, kde,                     &
                       ims, ime, jms, jme, kms, kme,                     &
                       its, ite, jts, jte,                               &
@@ -4034,6 +4050,8 @@ BENCH_START(moist_phys_end_tim)
                       ims, ime, jms, jme, kms, kme,                     &
                       its, ite, jts, jte,                               &
                       k_start    , k_end                                )
+       ENDIF
+       ENDIF
 
        IF ( config_flags%periodic_x ) THEN
          its = max(grid%i_start(ij),ids)
@@ -4045,6 +4063,7 @@ BENCH_START(moist_phys_end_tim)
        jts = max(grid%j_start(ij),jds+sz)
        jte = min(grid%j_end(ij),jde-1-sz)
 
+       IF ( config_flags%mp_zero_out > 0 ) THEN
        CALL microphysics_zero_outa (                                    &
                       moist , num_moist , config_flags ,                &
                       ids, ide, jds, jde, kds, kde,                     &
@@ -4052,6 +4071,7 @@ BENCH_START(moist_phys_end_tim)
                       its, ite, jts, jte,                               &
                       k_start    , k_end                                )
 
+       IF ( config_flags%mp_zero_out_all > 0 ) THEN
        CALL microphysics_zero_outa (                                    &
                       scalar , num_scalar , config_flags ,              &
                       ids, ide, jds, jde, kds, kde,                     &
@@ -4072,6 +4092,8 @@ BENCH_START(moist_phys_end_tim)
                       ims, ime, jms, jme, kms, kme,                     &
                       its, ite, jts, jte,                               &
                       k_start    , k_end                                )
+       ENDIF
+       ENDIF
 
        CALL moist_physics_finish_em( grid%t_2, grid%t_1, t0, grid%muts, th_phy,  &
                                      grid%h_diabatic, dtm,                       &
