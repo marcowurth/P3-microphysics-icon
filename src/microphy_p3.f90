@@ -23,12 +23,12 @@
 !    Jason Milbrandt (jason.milbrandt@ec.gc.ca), or                                        !
 !    Melissa Cholette (melissa.cholette@ec.gc.ca)                                          !
 !                                                                                          !
-! For all code updates, including bug-fixes and new developments, see:                     !
+! For all code updates, including bug-fixes, new developments, and test summaries, see:    !
 !    https://github.com/P3-microphysics/P3-microphysics                                    !
 !__________________________________________________________________________________________!
 !                                                                                          !
-! Version:       5.5.0-rc13                                                                !
-! Last updated:  2025 Nov                                                                  !
+! Version:       5.5.0                                                                     !
+! Last updated:  2025 Dec                                                                  !
 !__________________________________________________________________________________________!
 
  MODULE microphy_p3
@@ -61,7 +61,7 @@
  integer, parameter :: rimsize      =  4
  integer, parameter :: liqsize      =  4
  integer, parameter :: rcollsize    = 30
- integer, parameter :: tabsize      = 19  ! number of quantities used from lookup table
+ integer, parameter :: tabsize      = 19  ! number of quantities used from 2-mom lookup table
  integer, parameter :: tabsize_3mom = 29  ! number of quantities used from 3-mom lookup table
  integer, parameter :: colltabsize  =  2  ! number of ice-rain collection  quantities used from lookup table
  integer, parameter :: colltabsize_3mom  =  3  ! number of ice-rain collection  quantities used from 3-mom lookup table
@@ -72,9 +72,9 @@
  real, parameter    :: real_rcollsize = real(rcollsize)
 
  ! NOTE: TO DO, MAKE LOOKUP TABLE ARRAYS ALLOCATABLE SO BOTH 2-MOMENT AND 3-MOMENT NOT ALLOCATED
- real, dimension(densize,rimsize,liqsize,isize,tabsize)                     :: itab        !ice lookup table values
- real, dimension(zsize,densize,rimsize,liqsize,isize,tabsize_3mom)          :: itab_3mom   !ice lookup table values
- real, dimension(zqsize,densize,rimsize,liqsize,isize,2)                    :: itab_3mom_mui  !ice lookup table values
+ real, dimension(densize,rimsize,liqsize,isize,tabsize)            :: itab           !ice lookup table values
+ real, dimension(zsize,densize,rimsize,liqsize,isize,tabsize_3mom) :: itab_3mom      !ice lookup table values
+ real, dimension(zqsize,densize,rimsize,liqsize,isize,2)           :: itab_3mom_mui  !ice lookup table values
 
 !ice lookup table values for ice-rain collision/collection
  real, dimension(densize,rimsize,liqsize,isize,rcollsize,colltabsize)       :: itabcoll
@@ -82,14 +82,14 @@
 
  ! NOTE: TO DO, MAKE LOOKUP TABLE ARRAYS ALLOCATABLE SO MULTICAT NOT ALLOCATED WHEN NCAT = 1
 ! separated into itabcolli001 and itabcolli002, due to max of 7 dimensional arrays on some FORTRAN compilers
- real, dimension(iisize,rimsize,densize,iisize,rimsize,densize)     :: itabcolli001
- real, dimension(iisize,rimsize,densize,iisize,rimsize,densize)     :: itabcolli002
- real, dimension(iisize,rimsize,densize,iisize,rimsize,densize)     :: itabcolli011
- real, dimension(iisize,rimsize,densize,iisize,rimsize,densize)     :: itabcolli012
- real, dimension(iisize,rimsize,densize,iisize,rimsize,densize)     :: itabcolli101
- real, dimension(iisize,rimsize,densize,iisize,rimsize,densize)     :: itabcolli102
- real, dimension(iisize,rimsize,densize,iisize,rimsize,densize)     :: itabcolli111
- real, dimension(iisize,rimsize,densize,iisize,rimsize,densize)     :: itabcolli112
+ real, dimension(iisize,rimsize,densize,iisize,rimsize,densize) :: itabcolli001
+ real, dimension(iisize,rimsize,densize,iisize,rimsize,densize) :: itabcolli002
+ real, dimension(iisize,rimsize,densize,iisize,rimsize,densize) :: itabcolli011
+ real, dimension(iisize,rimsize,densize,iisize,rimsize,densize) :: itabcolli012
+ real, dimension(iisize,rimsize,densize,iisize,rimsize,densize) :: itabcolli101
+ real, dimension(iisize,rimsize,densize,iisize,rimsize,densize) :: itabcolli102
+ real, dimension(iisize,rimsize,densize,iisize,rimsize,densize) :: itabcolli111
+ real, dimension(iisize,rimsize,densize,iisize,rimsize,densize) :: itabcolli112
 
 ! integer switch for warm rain autoconversion/accretion schemes
  integer :: autoAccr_param
@@ -155,11 +155,11 @@
 
 ! Local variables and parameters:
  logical, save                  :: is_init = .false.
- character(len=1024), parameter :: version_p3                    = '5.5.0-rc13'
+ character(len=1024), parameter :: version_p3                    = '5.5.0'
  character(len=1024), parameter :: version_intended_table_1_2mom = '6.9-2momI'
  character(len=1024), parameter :: version_intended_table_1_3mom = '6.9-3momI'
  character(len=1024), parameter :: version_intended_table_2      = '6.2'
- character(len=1024), parameter :: version_intended_table_3      = '1.4' !for mu_i with 3mom
+ character(len=1024), parameter :: version_intended_table_3      = '1.4'
 
  character(len=1024)            :: version_header_table_1_2mom
  character(len=1024)            :: version_header_table_1_3mom
@@ -177,9 +177,8 @@
 
 !------------------------------------------------------------------------------------------!
 
-!read_path = lookup_file_dir           ! path for lookup tables from official model library
+ read_path = lookup_file_dir           ! path for lookup tables from official model library
 !read_path = '/MY/LOOKUP_TABLE/PATH'   ! path for lookup tables from user-specified location
- read_path = '/fs/homeu2/eccc/mrd/ords/armp/jam003/p3_lookup_tables'  !*** TO BE REMOVED ***
 
  if (trplMomI) then
    lookup_file_1 = trim(read_path)//'/'//'p3_lookupTable_1.dat-v'//trim(version_intended_table_1_3mom)

@@ -274,9 +274,9 @@ module phy_options
 
    !# Switch for p3 parameterization of autoconversion/accretion/self-collection in microphysics (P3) scheme
    !# 1:Seifert & Beheng 2000, 2:Khairoutdinov & Kogan, 2000 (default), 3:Kogan 2013; (used in GEM)
-   integer           :: p3_autoAccr_iparam = 3
-   namelist /physics_cfgs/ p3_autoAccr_iparam
-   namelist /physics_cfgs_p/ p3_autoAccr_iparam
+   integer           :: p3_autoAccr = 3
+   namelist /physics_cfgs/ p3_autoAccr
+   namelist /physics_cfgs_p/ p3_autoAccr
 
    !# Number of ice-phase hydrometeor categories to use in the P3 microphysics
    !# scheme (currently limited to <5)
