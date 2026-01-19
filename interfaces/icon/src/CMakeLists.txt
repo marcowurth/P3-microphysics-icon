@@ -5,11 +5,12 @@ set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/../cmake")
 message(STATUS "Looking for FindNetCDF.cmake in: ${CMAKE_MODULE_PATH}")
 
-# use this to fix for horeka module path bug while using lib/netcdf-fortran/4.6-intel-2025.1_llvm: 
-set(NF_CONFIG_BIN "/software/all/lib/netcdf-fortran/4.6.2_intel_2025.1_llvm_serial/bin")
+# use this for horeka module lib/netcdf-fortran/4.6: 
+set(NF_CONFIG_BIN "/software/all/lib/netcdf-fortran/4.6_intel_2025.1_llvm_openmpi_5.0/bin")
 
 # or instead set to whatever lies in $NETCDF_FORTRAN_BIN_DIR or $NETCDF_FORTRAN_ROOT/bin (example):
 #set(NF_CONFIG_BIN "/software/all/lib/netcdf-fortran/4.6_intel_2025.1_llvm_impi_2021.11/bin")
+#set(NF_CONFIG_BIN "${$NETCDF_FORTRAN_BIN_DIR}")  <-- sth like this does not work, cmake needs hard-coded paths
 
 # compile the plugin with OpenMP for hybrid OpenMP-MPI parallelization:
 #find_package(OpenMP REQUIRED COMPONENTS Fortran)

@@ -1,27 +1,31 @@
 # P3 for ICON
 ## Important Remarks
-- needs ComIn 0.4.0 and the corresponding icon branch https://gitlab.dkrz.de/icon/icon/-/tree/comin-0.4.0
-- developed and tested only on Horeka cpuonly nodes with Intel oneAPI 2025.1 compilers and Open MPI 5.0
+- needs ComIn 0.4.0 and therefore at least icon release icon-2025.10-1 (updated branch https://gitlab.dkrz.de/icon/icon/-/tree/release-2025.10)
+- developed and tested only on Horeka cpuonly nodes with Intel oneAPI 2025.1 compilers (ifx, icpx, icx) and Open MPI 5.0
 - not tested on Levante or other clusters and not developed for GPU offloading
-- developed for a single ICON domain (ICON-LAM, Torus-Grid or Global) and only offline nesting is possible
+- developed for running a single ICON domain at once (ICON-LAM, Torus-Grid or Global) and only offline nesting is possible
 - as the branch name suggests this is based on P3 v5.4 but will probably be updated to the lastest P3 v5.5 at some time
 
 ## Detailed Installation Steps
-- clone the icon branch comin-0.4.0 and this repo outside of it and checkout the branch `icon-p3v5.4`
-- unpack the P3 lookup tables:
+- clone the icon branch `release-2025.10` and branch `icon-p3v5.4` of this P3 repo into separate directories:
+```
+git clone -b release-2025.10 --recursive git@gitlab.dkrz.de:icon/icon.git my-icon-release-2025.10
+git clone -b icon-p3v5.4 git@github.com:marcowurth/P3-microphysics-icon.git P3-microphysics-icon
+```
+- go into the P3 dir and unpack the P3 lookup tables (make sure before to be on branch `icon-p3v5.4`):
 ```
 cd P3-microphysics-icon/lookup_tables
 gunzip *.gz
 ```
-- load Horeka modules needed for building:
+- load Horeka modules needed for building (without loading these modules now compiling ICON+ComIn doesn't work):
 ```
 module purge
-module add compiler/intel/2025.1_llvm mpi/openmpi/5.0 lib/netcdf/4.9-serial lib/hdf5/1.14-serial lib/netcdf-fortran/4.6-intel-2025.1_llvm lib/eccodes_nonetcdf/2.32.0 numlib/mkl/2025.1 libfyaml
+module add compiler/intel/2025.1_llvm mpi/openmpi/5.0 lib/hdf5/1.14 lib/netcdf/4.9 lib/netcdf-fortran/4.6 lib/eccodes_nonetcdf/2.32.0 numlib/mkl/2025.1 libfyaml
 ```
-- copy and run special icon-comin config file, then build ICON (includes incomplete building of ComIn):
+- copy and run special icon-comin config file, then build ICON (make sure before to be on branch `release-2025.10`), this includes the standard incomplete building of ComIn:
 ```
-cp P3-microphysics-icon/interfaces/icon/icon-config/hk.cpu.intel-2025-openmpi-5.0_comin_debug my-icon-comin-0.4.0/config/kit
-cd my-icon-comin-0.4.0
+cp P3-microphysics-icon/interfaces/icon/icon-config/hk.cpu.intel-2025-openmpi-5.0_comin_debug my-icon-release-2025.10/config/kit
+cd my-icon-release-2025.10
 chmod 755 config/kit/hk.cpu.intel-2025-openmpi-5.0_comin_debug
 ./config/kit/hk.cpu.intel-2025-openmpi-5.0_comin_debug
 make -j8
@@ -36,7 +40,8 @@ cmake ..
 make
 export ComIn_DIR="$(pwd)"
 ```
-- check in `P3-microphysics-icon/interfaces/icon/src/CMakeLists.txt` the compiler options you want (debug or fast) and accordingly leave one of the two target_compile_options() blocks uncommented
+- check in `P3-microphysics-icon/interfaces/icon/src/CMakeLists.txt` the compiler options you want to use with P3 (debug or fast) and accordingly leave one of the two target_compile_options() blocks uncommented
+- also check and set the path of the `NF_CONFIG_BIN` cmake variable to where the netcdf-fortran utility program `nf-config` lies (the uncommented line should work for the current Horeka module lib/netcdf-fortran/4.6 as of January 2026)
 - now you can build the P3 plugin outside of but linked to ComIn:
 ```
 cd to P3-microphysics-icon/interfaces/icon
@@ -94,6 +99,7 @@ Three options are available set by `itracer_ini` for the initialization of the P
 - 3: initialize from P3 tracers  
 
 The tracer_ini_filename file must be in netcdf4 format and also contain the model halve levels of the ini data (named `hhl` or `HHL`) as a 2D-field. The tracer fields can be 2D like e.g. (height, ncells) or 3D like e.g. (time, height, ncells) but the dimensions can also be of another order e.g. (height. ncells, time). The fields are interpolated vertically from the ini data levels to the model run levels. This way a typical output file from a 1M-scheme or P3-scheme model run can be used to initialize P3 and therefore "offline" nesting is possible.  
+
 In the initialization with P3 tracers, if the ice category number between ini data and model run doesn't match additional categories are ignored or categories left empty. The same applies for differing settings of `l3mom_ice` or `lliqfrac`.
 
 ### P3 lateral boundary conditions for ICON-LAM setups

@@ -11,7 +11,7 @@
 # ------------------------------------------
 
 # to be run with:
-# module add compiler/intel/2025.1_llvm mpi/openmpi/5.0 lib/netcdf/4.9-serial lib/hdf5/1.14-serial lib/netcdf-fortran/4.6-intel-2025.1_llvm lib/eccodes_nonetcdf/2.32.0 numlib/mkl/2025.1 libfyaml
+# module add compiler/intel/2025.1_llvm mpi/openmpi/5.0 lib/hdf5/1.14 lib/netcdf/4.9 lib/netcdf-fortran/4.6 lib/eccodes_nonetcdf/2.32.0 numlib/mkl/2025.1 libfyaml
 
 
 
@@ -27,17 +27,18 @@ CC="${INTEL_HOME}/bin/icx"
 FC="${INTEL_HOME}/bin/ifx"
 AR="${INTEL_HOME}/bin/compiler/llvm-ar"
 
-#MPI_ROOT='/software/all/mpi/openmpi/4.1_intel_2025.1_llvm'
+#MPI_ROOT='/software/all/mpi/openmpi/5.0-intel-2025.1_llvm'
 MPI_LIBS='-lmpi_usempif08 -lmpi_usempi_ignore_tkr -lmpi_mpifh -lmpi'
-MPI_FORTRAN_MOD_DIR="${MPI_ROOT}/lib"
+#MPI_LIBS='-lmpifort -lmpi'
 
-#HDF5_ROOT='/software/all/lib/hdf5/1.14_intel_2025.1_llvm_serial'
+#HDF5_ROOT='/software/all/lib/hdf5/1.14_intel_2025.1_llvm_openmpi_5.0'
 HDF5_LIBS='-lhdf5_hl_fortran -lhdf5_fortran -lhdf5'
 
-#NETCDF_ROOT='/software/all/lib/netcdf/4.9_intel_2025.1_llvm_serial'
+#NETCDF_ROOT='/software/all/lib/netcdf/4.9_intel_2025.1_llvm_openmpi_5.0'
 NETCDF_LIBS='-lnetcdf'
 
-NETCDF_FORTRAN_ROOT='/software/all/lib/netcdf-fortran/4.6.2_intel_2025.1_llvm_serial'
+#NETCDF_FORTRAN_ROOT='/software/all/lib/netcdf-fortran/4.6_intel_2025.1_llvm_openmpi_5.0'
+#NETCDF_FORTRAN_ROOT='/software/all/lib/netcdf-fortran/4.6_intel_2025.1_llvm_impi_2021.11'
 NETCDF_FORTRAN_LIBS='-lnetcdff'
 
 #MKL_HOME='/software/all/toolkit/Intel_OneAPI/mkl/2025.1'
