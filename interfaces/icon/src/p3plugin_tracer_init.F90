@@ -458,12 +458,13 @@ CONTAINS
     REAL, INTENT(OUT)        :: var_3dpatch_outlevs(:, :, :)
 
     CHARACTER(30)            :: varname_dummy, dimname
-    INTEGER                  :: rank, nc_status, ncid, ncells_global, nlev_in
+    INTEGER                  :: rank, nc_status, ncid, ncells_global, nlev_in, nlev_in_hhl
     INTEGER                  :: i, varid, hhlid, xtype, ndims, natts, dimpos_time, dimpos_ncells, dimid_ncells
     INTEGER                  :: dimids(NF90_MAX_VAR_DIMS), dimlen(NF90_MAX_VAR_DIMS)
     INTEGER                  :: jg, jb, jk, jc, jglobal
     INTEGER                  :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
-    REAL, ALLOCATABLE        :: varvalues_file_2d(:, :), hhlvalues_file_2d(:, :), varvalues_file_3d(:, :, :)
+    REAL, ALLOCATABLE        :: varvalues_file_2d(:, :), varvalues_file_3d(:, :, :)
+    REAL, ALLOCATABLE        :: hhlvalues_file_2d(:, :), hhlvalues_file_3d(:, :, :)
     REAL, ALLOCATABLE        :: var_global_inlevs(:, :), hhl_global_inlevs(:, :), hfl_1d_inlevs(:)
 
     rank = comin_parallel_get_host_mpi_rank()
@@ -543,7 +544,7 @@ CONTAINS
         IF (TRIM(dimname) == 'time') THEN
           dimpos_time = i
           IF (dimlen(i) > 1) THEN
-            IF (rank == 0) WRITE (0,'(a)') 'Dimension "time" has more than one time step, choosing the first'
+            IF (rank == 0) WRITE (0,'(a)') 'Reading of 3D var: dimension "time" has more than one time step, choosing the first'
           ENDIF
         ELSE IF (TRIM(dimname) == 'ncells') THEN
           dimpos_ncells = i
@@ -606,28 +607,96 @@ CONTAINS
       & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not inquire hhl!')
     IF (xtype /= NF90_DOUBLE .and. xtype /= NF90_FLOAT) &
       & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'hhl type not double or float!')
-    IF (ndims /= 2) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'hhl does not have 2 dimensions!')
-    dimpos_ncells = 0
-    DO i = 1, 2
-      nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-      !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
-      IF (TRIM(dimname) == 'ncells') dimpos_ncells = i
-    END DO
-    IF (dimpos_ncells == 0) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not find dimension "ncells" in hhl!')
 
-    ALLOCATE(hhl_global_inlevs(ncells_global, nlev_in+1))
-    ALLOCATE(hhlvalues_file_2d(dimlen(1), dimlen(2)))
-    nc_status = nf90_get_var(ncid, hhlid, hhlvalues_file_2d)
-    !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of hhl'
-
-    SELECT CASE (dimpos_ncells)
+    SELECT CASE (ndims)
     CASE (1)
-      hhl_global_inlevs(:, :) = hhlvalues_file_2d(:, :)
+      CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'hhl does not have 2 dimensions!')
     CASE (2)
-      hhl_global_inlevs(:, :) = transpose(hhlvalues_file_2d(:, :))
+      dimpos_ncells = 0
+      DO i = 1, 2
+        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
+        !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
+        IF (TRIM(dimname) == 'time') THEN
+          CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Found dimension "time" in 2d array: hhl')
+        ELSE IF (TRIM(dimname) == 'ncells') THEN
+          dimpos_ncells = i
+        ELSE
+          nlev_in_hhl = dimlen(i)
+        ENDIF
+      END DO
+      IF (dimpos_ncells == 0) &
+        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not find dimension "ncells" in hhl!')
+      IF (nlev_in_hhl /= nlev_in+1) &
+        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
+                                 & 'Mismatch in vertical dimension shape: nlev(hhl_inifile) /= nlev(var_inifile)+1')
+
+      ALLOCATE(hhl_global_inlevs(ncells_global, nlev_in_hhl))
+      ALLOCATE(hhlvalues_file_2d(dimlen(1), dimlen(2)))
+      nc_status = nf90_get_var(ncid, hhlid, hhlvalues_file_2d)
+      !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of hhl'
+
+      SELECT CASE (dimpos_ncells)
+      CASE (1)
+        hhl_global_inlevs(:, :) = hhlvalues_file_2d(:, :)
+      CASE (2)
+        hhl_global_inlevs(:, :) = transpose(hhlvalues_file_2d(:, :))
+      END SELECT
+
+    CASE (3)
+      dimpos_time = 0
+      dimpos_ncells = 0
+      DO i = 1, 3
+        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
+        !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
+        IF (TRIM(dimname) == 'time') THEN
+          dimpos_time = i
+          IF (dimlen(i) > 1) THEN
+            IF (rank == 0) WRITE (0,'(a)') 'Reading of 3D hhl: dimension "time" has more than one time step, choosing the first'
+          ENDIF
+        ELSE IF (TRIM(dimname) == 'ncells') THEN
+          dimpos_ncells = i
+        ELSE
+          nlev_in_hhl = dimlen(i)
+        ENDIF
+      END DO
+
+      IF (dimpos_time == 0) &
+        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not find dimension "time" in: hhl')
+      IF (dimpos_ncells == 0) &
+        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not find dimension "ncells" in: hhl')
+
+      ALLOCATE(hhl_global_inlevs(ncells_global, nlev_in_hhl))
+      ALLOCATE(hhlvalues_file_3d(dimlen(1), dimlen(2), dimlen(3)))
+      nc_status = nf90_get_var(ncid, hhlid, hhlvalues_file_3d)
+      !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of hhl'
+      !IF (rank == 0) WRITE (0,'(a,F10.5,F10.5)') 'min max:', minval(hhlvalues_file_3d), maxval(hhlvalues_file_3d)
+
+      SELECT CASE (dimpos_time)
+      CASE (1)
+        IF (dimpos_ncells == 2) THEN
+          hhl_global_inlevs(:, :) = hhlvalues_file_3d(1, :, :)
+        ELSE
+          hhl_global_inlevs(:, :) = transpose(hhlvalues_file_3d(1, :, :))
+        ENDIF
+      CASE (2)
+        IF (dimpos_ncells == 1) THEN
+          hhl_global_inlevs(:, :) = hhlvalues_file_3d(:, 1, :)
+        ELSE
+          hhl_global_inlevs(:, :) = transpose(hhlvalues_file_3d(:, 1, :))
+        ENDIF
+      CASE (3)
+        IF (dimpos_ncells == 1) THEN
+          hhl_global_inlevs(:, :) = hhlvalues_file_3d(:, :, 1)
+        ELSE
+          hhl_global_inlevs(:, :) = transpose(hhlvalues_file_3d(:, :, 1))
+        ENDIF
+      END SELECT
+
+    CASE (4:)
+      CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Variable has more than 3 dimensions: hhl')
+
     END SELECT
+    ! end of reading variable
 
     nc_status = nf90_close(ncid)
     IF (nc_status /= NF90_NOERR) &
