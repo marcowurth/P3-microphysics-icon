@@ -26,16 +26,16 @@ MODULE p3plugin_types
   TYPE :: t_mp_vars_handle
     TYPE(t_comin_var_handle)            :: dmean_c, dmean_r, deff_c, deff_i, reff_qc, reff_qi
     TYPE(t_comin_var_handle)            :: dhmax, dhmax_ground, ze_p3
-    TYPE(t_comin_var_handle)            :: prec_gsp_rate, rain_gsp_rate, snow_gsp_rate
-    TYPE(t_comin_var_handle)            :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp
+    TYPE(t_comin_var_handle)            :: prec_gsp_rate, rain_gsp_rate, snow_gsp_rate, ice_gsp_rate
+    TYPE(t_comin_var_handle)            :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp, ice_gsp
     TYPE(t_comin_var_handle)            :: q_sedim, twater
   END type t_mp_vars_handle
 
   TYPE :: t_mp_vars_3dptr
     REAL(wp), POINTER, DIMENSION(:,:,:) :: dmean_c, dmean_r, deff_c, deff_i, reff_qc, reff_qi
     REAL(wp), POINTER, DIMENSION(:,:,:) :: dhmax, dhmax_ground, ze_p3
-    REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp_rate, rain_gsp_rate, snow_gsp_rate
-    REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp_rate, rain_gsp_rate, snow_gsp_rate, ice_gsp_rate
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp, ice_gsp
     REAL(wp), POINTER, DIMENSION(:,:,:) :: q_sedim, twater
   CONTAINS
     PROCEDURE :: nullify => nullify_mp_vars_3dptr
@@ -84,8 +84,8 @@ CONTAINS
     CLASS(t_mp_vars_3dptr), INTENT(inout) :: this
     NULLIFY(this%dmean_c, this%dmean_r, this%deff_c, this%deff_i, this%reff_qc, this%reff_qi)
     NULLIFY(this%dhmax, this%dhmax_ground, this%ze_p3)
-    NULLIFY(this%prec_gsp_rate, this%rain_gsp_rate, this%snow_gsp_rate)
-    NULLIFY(this%prec_gsp, this%prec_gsp_d, this%rain_gsp, this%snow_gsp)
+    NULLIFY(this%prec_gsp_rate, this%rain_gsp_rate, this%snow_gsp_rate, this%ice_gsp_rate)
+    NULLIFY(this%prec_gsp, this%prec_gsp_d, this%rain_gsp, this%snow_gsp, this%ice_gsp)
     NULLIFY(this%q_sedim, this%twater)
   END SUBROUTINE nullify_mp_vars_3dptr
 

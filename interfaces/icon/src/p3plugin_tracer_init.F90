@@ -9,10 +9,11 @@ MODULE p3plugin_tracer_init
   USE comin_plugin_interface,  ONLY : comin_parallel_get_host_mpi_rank, comin_descrdata_get_timesteplength, &
     &                                 comin_descrdata_get_cell_indices, comin_plugin_finish
 
-  USE p3plugin_types,          ONLY : t_dyn_vars_3dptr, t_icon_tracer_3dptr, t_p3_tracer_3dptr
+  USE p3plugin_types,          ONLY : t_dyn_vars_3dptr, t_icon_tracer_3dptr, t_mp_vars_3dptr,               &
+    &                                 t_p3_tracer_3dptr
   USE p3plugin_global_vars,    ONLY : dtime, fastphystep, n_icecat, itracer_ini, l3mom_ice, lliqfrac,  &
     &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,           &
-    &                                 dyn_vars, icon_tracer, p3_tracer
+    &                                 dyn_vars, icon_tracer, mp_vars, p3_tracer
 
   USE microphy_p3,             ONLY : p3_init, status_ok
 
@@ -57,6 +58,7 @@ CONTAINS
     TYPE(t_icon_tracer_3dptr) :: icon_tracer_3d
     TYPE(t_p3_tracer_3dptr)   :: p3_tracer_3d(n_icecat)
     TYPE(t_dyn_vars_3dptr)    :: dyn_vars_3d
+    TYPE(t_mp_vars_3dptr)     :: mp_vars_3d
 
     rank = comin_parallel_get_host_mpi_rank()
     IF (rank == 0) WRITE (0,*) 'call p3_init'
@@ -66,6 +68,9 @@ CONTAINS
 
     dtime = comin_descrdata_get_timesteplength(1)
     fastphystep = 1
+
+    CALL mp_vars%ice_gsp_rate%to_3d(mp_vars_3d%ice_gsp_rate)
+    CALL mp_vars%ice_gsp%to_3d(mp_vars_3d%ice_gsp)
 
     CALL icon_tracer%qc%to_3d(icon_tracer_3d%qc)
     CALL icon_tracer%qnc%to_3d(icon_tracer_3d%qnc)
@@ -425,7 +430,14 @@ CONTAINS
 !!$OMP END DO
 !!$OMP END PARALLEL
 
+
+    ! set ice_gsp_rate to zero, it is needed in the sfc interface for terra (blowing snow for snow tiles)
+    mp_vars_3d%ice_gsp_rate(:,:,1) = 0.0
+    mp_vars_3d%ice_gsp(:,:,1) = 0.0
+
+
     CALL dyn_vars_3d%nullify()
+    CALL mp_vars_3d%nullify()
     CALL icon_tracer_3d%nullify()
     DO i_icecat = 1, n_icecat
       CALL p3_tracer_3d(i_icecat)%nullify()
