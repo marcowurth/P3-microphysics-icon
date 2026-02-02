@@ -205,7 +205,7 @@
 ! = 2 Beheng 1994
 ! = 3 Khairoutdinov and Kogan 2000
 ! = 4 Kogan 2013
- iparam = 3
+ iparam = 1
 
 ! droplet concentration (m-3)
  nccnst = 200.e+6
@@ -6055,6 +6055,25 @@ call cpu_time(timer_start(9))
 !           diag_3d(i,k,2) = maxval(diag_dhmax(i,k,:))
 !        enddo
 !     enddo
+ endif
+!---
+
+!--- diagnostics for ICON only:
+ if (trim(model)=='ICON') then
+    do i = its,ite
+       do k = ktop,kbot,-kdir
+          if (qc(i,k).ge.qsmall) then
+             call get_cloud_dsd2(qc(i,k),nc(i,k),mu_c(i,k),rho(i,k),nu(i,k),dnu,lamc(i,k),  &
+                                 lammin,lammax,tmp1,tmp2,1.)
+             diag_3d(i,k,1) = (mu_c(i,k)+1.)/lamc(i,k)
+          endif
+
+          if (qr(i,k).ge.qsmall) then
+             call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,1.)
+             diag_3d(i,k,2) = (mu_r(i,k)+1.)/lamr(i,k)
+          endif
+       enddo
+    enddo
  endif
 !---
 

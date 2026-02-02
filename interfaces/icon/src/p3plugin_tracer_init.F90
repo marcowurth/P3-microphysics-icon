@@ -696,7 +696,7 @@ CONTAINS
       CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Variable has more than 3 dimensions: hhl')
 
     END SELECT
-    ! end of reading variable
+    ! end of reading hhl
 
     nc_status = nf90_close(ncid)
     IF (nc_status /= NF90_NOERR) &

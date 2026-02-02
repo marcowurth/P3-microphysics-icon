@@ -143,7 +143,7 @@ CONTAINS
 
 
     n_diag_2d = 1  ! not used
-    n_diag_3d = 3  ! diag_3d contains dmean_c, dmean_r
+    n_diag_3d = 2  ! diag_3d contains dmean_c, dmean_r
     ALLOCATE(diag_2d(p_global%nproma, p_patch%cells%nblks, n_diag_2d))
     ALLOCATE(diag_3d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_diag_3d))
 
