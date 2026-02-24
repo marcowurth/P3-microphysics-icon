@@ -79,8 +79,6 @@ CONTAINS
     CALL create_var('theta_old', 'K', '3d', 'dp')
     CALL create_var('qv_old', 'kg kg-1', '3d', 'dp')
     CALL create_var('ddt_temp_phys', 'K s-1', '3d', 'dp')
-    CALL create_var('ice_gsp_rate', 'kg/m2/s', '2d', 'dp')
-    CALL create_var('ice_gsp', 'kg/m2', '2d', 'dp')
     CALL create_var('dmean_c', 'm', '3d', 'dp')
     CALL create_var('dmean_r', 'm', '3d', 'dp')
     CALL create_var('deff_c', 'm', '3d', 'dp')

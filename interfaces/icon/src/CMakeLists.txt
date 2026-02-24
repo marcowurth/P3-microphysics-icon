@@ -39,9 +39,9 @@ target_compile_options(p3_main PRIVATE
 
 # compiler options with fast runtime optimizations without debugging:
 #target_compile_options(${PROJECT_NAME} PRIVATE
-#  -O2 -fma -fp-model fast -ftz -qno-opt-dynamic-align)
+#  -O2 -xICELAKE-SERVER -fma -fp-model fast -ftz -qno-opt-dynamic-align)
 #target_compile_options(p3_main PRIVATE
-#  -O2 -fma -fp-model fast -ftz -qno-opt-dynamic-align)
+#  -O2 -xICELAKE-SERVER -fma -fp-model fast -ftz -qno-opt-dynamic-align)
 
 
 # compile the plugin with OpenMP for hybrid OpenMP-MPI parallelization:

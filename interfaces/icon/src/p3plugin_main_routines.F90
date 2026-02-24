@@ -346,23 +346,25 @@ CONTAINS
     mp_vars_3d%snow_gsp(:,:,1) = mp_vars_3d%snow_gsp(:,:,1) + prt_sol_2d * 1000.
     !IF (rank == 0) WRITE (0,*) 'shape(prt_sol_2d)', shape(prt_sol_2d)
 
-    CALL print_global_max('w', dyn_vars_3d%w_hl)
-    CALL print_global_max('qv', icon_tracer_3d%qv)
-    CALL print_global_max('qc', icon_tracer_3d%qc)
-    CALL print_global_max('qnc', icon_tracer_3d%qnc)
-    CALL print_global_max('qr', icon_tracer_3d%qr)
-    CALL print_global_max('qnr', icon_tracer_3d%qnr)
-    CALL print_global_max('qi', icon_tracer_3d%qi)
-    DO i_icecat = 1, n_icecat
-      CALL print_global_max('qitot', p3_tracer_3d(i_icecat)%qitot)
-      CALL print_global_max('dmean_i', p3_vars_3d(i_icecat)%dmean_i)
-    END DO
-    !CALL print_global_max('dhmax', mp_vars_3d%dhmax)
-    !CALL print_global_max('dhmax_ground', mp_vars_3d%dhmax)
+    ! IF (rank == 0) THEN
+    !   CALL print_global_max('w', dyn_vars_3d%w_hl)
+    !   CALL print_global_max('qv', icon_tracer_3d%qv)
+    !   CALL print_global_max('qc', icon_tracer_3d%qc)
+    !   CALL print_global_max('qnc', icon_tracer_3d%qnc)
+    !   CALL print_global_max('qr', icon_tracer_3d%qr)
+    !   CALL print_global_max('qnr', icon_tracer_3d%qnr)
+    !   CALL print_global_max('qi', icon_tracer_3d%qi)
+    !   DO i_icecat = 1, n_icecat
+    !     CALL print_global_max('qitot', p3_tracer_3d(i_icecat)%qitot)
+    !     CALL print_global_max('dmean_i', p3_vars_3d(i_icecat)%dmean_i)
+    !   END DO
+    !   !CALL print_global_max('dhmax', mp_vars_3d%dhmax)
+    !   !CALL print_global_max('dhmax_ground', mp_vars_3d%dhmax)
 
-    !CALL print_global_max('rain_gsp_rate', mp_vars_3d%rain_gsp_rate, 3600.)
-    !CALL print_global_max('snow_gsp_rate', mp_vars_3d%snow_gsp_rate, 3600.)
-    !CALL print_global_max('ddt_temp_phys', dyn_vars_3d%ddt_temp_phys)
+    !   !CALL print_global_max('rain_gsp_rate', mp_vars_3d%rain_gsp_rate, 3600.)
+    !   !CALL print_global_max('snow_gsp_rate', mp_vars_3d%snow_gsp_rate, 3600.)
+    !   !CALL print_global_max('ddt_temp_phys', dyn_vars_3d%ddt_temp_phys)
+    ! ENDIF
 
     ! increment fastphysics step number
     fastphystep = fastphystep + 1
