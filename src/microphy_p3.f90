@@ -2191,7 +2191,7 @@ END subroutine p3_init
                    rimefrac_over_rhorime,arr_lami,arr_mui,rimedensity
 
  real, dimension(its:ite,kts:kte) :: i_dzq,i_rho,ze_ice,ze_rain,ze_cld,rho,rhofacr,      &
-            rhofaci,xxls,xxlv,xlf,enth_ls,enth_lv,qvs,qvi,sup,supi,vtrmi1,tmparr1,       &
+            rhofaci,xxls,xxlv,xlf,enthls,enthlv,qvs,qvi,sup,supi,vtrmi1,tmparr1,       &
             massflux_r,i_exn,SCF,iSCF,SPF,iSPF,SPF_clr,Qv_cld,Qv_clr,prec,acn
 
  real, dimension(kts:kte) :: V_qr,V_qit,V_nit,V_nr,V_qc,V_nc,V_zit,flux_qit,flux_qx,     &
@@ -2552,11 +2552,12 @@ call cpu_time(timer_start(2))
        xxlv(i,k)    = 3.1484e6-2370.*trplpt !t(i,k), use constant Lv
        xlf(i,k)     = 3.337e5
        xxls(i,k)    = xxlv(i,k)+xlf(i,k)
-       enth_lv(i,k) = xxlv(i,k)    ! in isobaric case both are the same
-       enth_ls(i,k) = xxls(i,k)    ! in isobaric case both are the same
+       enthlv(i,k) = xxlv(i,k)    ! in isobaric case both are the same
+       enthls(i,k) = xxls(i,k)    ! in isobaric case both are the same
 
      ! in isochoric case (ICON model) use xxlv as internal energy of vaporization instead of its enthalpy
-     ! the enthalpy of vaporization is stored in enth_lv
+     ! the enthalpy of vaporization is stored in enthlv as both are needed
+     ! analogously for vapor deposition the same applies for xxls & enthls
        if (trim(model)=='ICON') then
           xxlv(i,k) = xxlv(i,k)-rv*trplpt !t(i,k), use constant Lv
           xxls(i,k) = xxls(i,k)-rv*trplpt !t(i,k), use constant Lv
@@ -2620,7 +2621,7 @@ call cpu_time(timer_start(2))
              if (t(i,k).lt.trplpt .and. tmp1.le.liqfracsmall) then
 
              !freeze small amount of liquid (qiliq) to rime
-                th(i,k) = th(i,k) + i_exn(i,k)*qiliq(i,k,iice)*xlf(i,k)*i_cp
+                th(i,k) = th(i,k) + i_exn(i,k)*qiliq(i,k,iice)*xlf(i,k)*i_cpv
                 birim(i,k,iice) = birim(i,k,iice) + qiliq(i,k,iice)*i_rho_rimeMax
                 qirim(i,k,iice) = qirim(i,k,iice) + qiliq(i,k,iice)
                 qiliq(i,k,iice) = 0.
@@ -2755,7 +2756,7 @@ call cpu_time(timer_start(3))
       ! production term for supersaturation, and the effects are sub-grid
       ! scale mixing and radiation are not explicitly included.
 
-          dqsdT   = enth_lv(i,k)*qvs(i,k)/(rv*t(i,k)**2)
+          dqsdT   = enthlv(i,k)*qvs(i,k)/(rv*t(i,k)**2)
           ab      = 1. + dqsdT*xxlv(i,k)*i_cpv
           epsilon = (qv(i,k)-qvs(i,k)-ssat(i,k))/ab
           epsilon = max(epsilon,-qc(i,k))   ! limit adjustment to available water
@@ -2795,8 +2796,8 @@ call cpu_time(timer_start(3))
           dv     = 8.794e-5*t(i,k)**1.81/pres(i,k)
           sc     = mu/(rho(i,k)*dv)
           dum    = 1./(rv*t(i,k)**2)
-          dqsdT  = enth_lv(i,k)*qvs(i,k)*dum
-          dqsidT = enth_ls(i,k)*qvi(i,k)*dum
+          dqsdT  = enthlv(i,k)*qvs(i,k)*dum
+          dqsidT = enthls(i,k)*qvi(i,k)*dum
           ab     = 1.+dqsdT*xxlv(i,k)*i_cpv
           abi    = 1.+dqsidT*xxls(i,k)*i_cpv
           kap    = 1.414e+3*mu
@@ -3200,10 +3201,10 @@ call cpu_time(timer_start(3))
                    qsat0 = 0.622*e0/(pres(i,k)-e0)
                    tmp1 = 0.
                    qrmlt(iice) = ((f1pr24+f1pr25*sc**thrd*(rhofaci(i,k)*rho(i,k)/mu)**     &
-                                 0.5)*((t(i,k)-trplpt)*kap-rho(i,k)*enth_lv(i,k)*dv*       &
+                                 0.5)*((t(i,k)-trplpt)*kap-rho(i,k)*enthlv(i,k)*dv*       &
                                  (qsat0-Qv_cld(i,k)))*2.*pi/xlf(i,k)+tmp1)*nitot(i,k,iice)
                    qimlt(iice) = ((f1pr26+f1pr27*sc**thrd*(rhofaci(i,k)*rho(i,k)/mu)**     &
-                                 0.5)*((t(i,k)-trplpt)*kap-rho(i,k)*enth_lv(i,k)*dv*       &
+                                 0.5)*((t(i,k)-trplpt)*kap-rho(i,k)*enthlv(i,k)*dv*       &
                                  (qsat0-Qv_cld(i,k)))*2.*pi/xlf(i,k)+tmp1)*nitot(i,k,iice)
                    qrmlt(iice) = max(qrmlt(iice),0.)
                    qimlt(iice) = max(qimlt(iice),0.)
@@ -3220,7 +3221,7 @@ call cpu_time(timer_start(3))
                    if (log_3momentIce) then
                       zimlt(iice) = -((f1pr24*f1pr32+f1pr25*f1pr33*sc**thrd*             &
                                     (rhofaci(i,k)*rho(i,k)/mu)**0.5)*((t(i,k)-trplpt)*   &
-                                    kap-rho(i,k)*enth_lv(i,k)*dv*(qsat0-Qv_cld(i,k)))*   &
+                                    kap-rho(i,k)*enthlv(i,k)*dv*(qsat0-Qv_cld(i,k)))*   &
                                     2.*pi/xlf(i,k)+tmp1)
                    endif
                 endif
@@ -3237,14 +3238,14 @@ call cpu_time(timer_start(3))
               !       (t(i,k)-trplpt)*2.*pi*kap/xlf(i,k)+tmp1
               ! include RH dependence
                    qrmlt(iice) = ((f1pr05+f1pr14*sc**thrd*(rhofaci(i,k)*rho(i,k)/mu)**     &
-                                 0.5)*((t(i,k)-trplpt)*kap-rho(i,k)*enth_lv(i,k)*dv*       &
+                                 0.5)*((t(i,k)-trplpt)*kap-rho(i,k)*enthlv(i,k)*dv*       &
                                  (qsat0-Qv_cld(i,k)))*2.*pi/xlf(i,k)+tmp1)*nitot(i,k,iice)
                    qrmlt(iice) = max(qrmlt(iice),0.)
                    nimlt(iice) = qrmlt(iice)*(nitot(i,k,iice)/qitot(i,k,iice))
                    if (log_3momentIce .and. log_full3mom)                                &
                       zimlt(iice) = -((f1pr05*f1pr30+f1pr14*f1pr31*sc**thrd*             &
                                     (rhofaci(i,k)*rho(i,k)/mu)**0.5)*((t(i,k)-trplpt)*   &
-                                    kap-rho(i,k)*enth_lv(i,k)*dv*(qsat0-Qv_cld(i,k)))*   &
+                                    kap-rho(i,k)*enthlv(i,k)*dv*(qsat0-Qv_cld(i,k)))*   &
                                     2.*pi/xlf(i,k)+tmp1)
                 endif
 
@@ -3261,7 +3262,7 @@ call cpu_time(timer_start(3))
 
                 qsat0  = 0.622*e0/(pres(i,k)-e0)
                 qwgrth(iice) = ((f1pr05+f1pr14*sc**thrd*(rhofaci(i,k)*rho(i,k)/mu)**     &
-                               0.5)*((t(i,k)-trplpt)*(-kap)+rho(i,k)*enth_ls(i,k)*dv*       &
+                               0.5)*((t(i,k)-trplpt)*(-kap)+rho(i,k)*enthls(i,k)*dv*       &
                                (qsat0-Qv_cld(i,k))*2.*pi/xlf(i,k)))*nitot(i,k,iice)
                 qwgrth(iice) = max(qwgrth(iice),0.)
 
@@ -3354,7 +3355,7 @@ call cpu_time(timer_start(3))
                 if (t(i,k).lt.trplpt) then
                   qsat0  = 0.622*e0/(pres(i,k)-e0)
                   qifrz(iice) = ((f1pr05+f1pr14*sc**thrd*(rhofaci(i,k)*rho(i,k)/mu)**    &
-                                0.5)*((t(i,k)-trplpt)*(-kap)+rho(i,k)*enth_ls(i,k)*dv*   &
+                                0.5)*((t(i,k)-trplpt)*(-kap)+rho(i,k)*enthls(i,k)*dv*   &
                                 (qsat0-Qv_cld(i,k))*2.*pi/xlf(i,k)))*nitot(i,k,iice)
                   qifrz(iice) = min(max(qifrz(iice),0.),qiliq(i,k,iice)*i_dt)
                 endif
@@ -3974,7 +3975,7 @@ call cpu_time(timer_start(3))
           tmp1   = nccnst*i_rho(i,k)*cons7-qc(i,k)
           tmp1   = max(0.,tmp1*iSCF(i,k))         ! in-cloud value
           dumqvs = qv_sat(t(i,k),pres(i,k),0)
-          dqsdT  = enth_lv(i,k)*dumqvs/(rv*t(i,k)**2)
+          dqsdT  = enthlv(i,k)*dumqvs/(rv*t(i,k)**2)
           ab     = 1. + dqsdT*xxlv(i,k)*i_cpv
           tmp1   = max(0.,min(tmp1,(Qv_cld(i,k)-dumqvs)/ab))  ! limit overdepletion of supersaturation
           qcnuc  = tmp1*i_dt*SCF(i,k)
@@ -3993,7 +3994,7 @@ call cpu_time(timer_start(3))
           dumqv  = Qv_cld(i,k)
           dumqvs = qv_sat(dumt,pres(i,k),0)
           dums   = dumqv-dumqvs
-          qccon  = dums/(1.+enth_lv(i,k)*xxlv(i,k)*dumqvs/(rv*dumt**2)*i_cpv)*i_dt*SCF(i,k)
+          qccon  = dums/(1.+enthlv(i,k)*xxlv(i,k)*dumqvs/(rv*dumt**2)*i_cpv)*i_dt*SCF(i,k)
           qccon  = max(0.,qccon)
           if (qccon.le.1.e-7) qccon = 0.
        endif
@@ -4008,9 +4009,9 @@ call cpu_time(timer_start(3))
     !Limit total condensation (incl. activation) and evaporation to saturation adjustment
        dumqvs = qv_sat(t(i,k),pres(i,k),0)
        qcon_satadj = (Qv_cld(i,k)-dumqvs)*SCF(i,k)/                                                    &
-                     (1.+enth_lv(i,k)*xxlv(i,k)*dumqvs/(rv*t(i,k)**2)*i_cpv)*i_dt
+                     (1.+enthlv(i,k)*xxlv(i,k)*dumqvs/(rv*t(i,k)**2)*i_cpv)*i_dt
        qevp_satadj = ((Qv_cld(i,k)-dumqvs)*(SPF(i,k)-SPF_clr(i,k))+(Qv_clr(i,k)-dumqvs)*SPF_clr(i,k))/ &
-                     (1.+enth_lv(i,k)*xxlv(i,k)*dumqvs/(rv*t(i,k)**2)*i_cpv)*i_dt
+                     (1.+enthlv(i,k)*xxlv(i,k)*dumqvs/(rv*t(i,k)**2)*i_cpv)*i_dt
 
        tmp1 = qccon+qrcon+qcnuc+sum(qlcon)
        if (tmp1>0. .and. qcon_satadj<0.) then
@@ -4050,7 +4051,7 @@ call cpu_time(timer_start(3))
        t_tmp  = t(i,k) + (qcnuc+qccon+qrcon+sum(qlcon)-qcevp-qrevp-sum(qlevp))*          &    !T after cond/evap
                           xxlv(i,k)*i_cpv*dt
        dumqvi = qv_sat(t_tmp,pres(i,k),1)
-       qdep_satadj = (qv_tmp-dumqvi)/(1.+enth_ls(i,k)*xxls(i,k)*dumqvi/(rv*t_tmp**2)*i_cpv)*i_dt*SCF(i,k)
+       qdep_satadj = (qv_tmp-dumqvi)/(1.+enthls(i,k)*xxls(i,k)*dumqvi/(rv*t_tmp**2)*i_cpv)*i_dt*SCF(i,k)
 
        tmp1 = sum(qidep)+sum(qinuc)
        if (tmp1>0. .and. qdep_satadj<0.) then
@@ -5120,7 +5121,7 @@ call cpu_time(timer_end(6))
          qv_tmp  = qv(i,k)
          dumqvs  = qv_sat(t_tmp,pres(i,k),0)
          if (qv_tmp .gt. dumqvs) then
-            dum     = (qv_tmp-dumqvs)/(1.+enth_lv(i,k)*xxlv(i,k)*dumqvs/(rv*t_tmp**2)*i_cpv)*i_dt
+            dum     = (qv_tmp-dumqvs)/(1.+enthlv(i,k)*xxlv(i,k)*dumqvs/(rv*t_tmp**2)*i_cpv)*i_dt
             qc(i,k) = qc(i,k)+dum*dt
             qv(i,k) = qv(i,k)-dum*dt
             th(i,k) = th(i,k) + 1./((pres(i,k)*1.e-5)**(rd*i_cp))*(dum*xxlv(i,k)*i_cpv)*dt
@@ -5186,7 +5187,7 @@ call cpu_time(timer_start(9))
        do k = ktop,kbot,-kdir
           if (qc(i,k).ge.qsmall) then
              call get_cloud_dsd2(qc(i,k),nc(i,k),mu_c(i,k),rho(i,k),nu(i,k),dnu,lamc(i,k),  &
-                                 lammin,lammax,tmp1,tmp2,1.)
+                                 tmp1,tmp2,1.)
              diag_3d(i,k,1) = (mu_c(i,k)+1.)/lamc(i,k)
           endif
 
