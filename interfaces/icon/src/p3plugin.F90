@@ -1,21 +1,25 @@
 
 MODULE p3plugin
-  !USE omp_lib
+  USE mpi,                     ONLY : MPI_Comm_split_type, MPI_Comm_rank, MPI_Comm_size, MPI_INFO_NULL,   &
+    &                                 MPI_COMM_TYPE_SHARED, MPI_Allreduce, MPI_Allgather, MPI_INT, MPI_MAX
 
-  USE comin_plugin_interface,  ONLY : comin_callback_register, comin_parallel_get_host_mpi_rank,        &
-    &                                 comin_var_get, t_comin_var_descriptor,                            &
-    &                                 t_comin_setup_version_info, comin_setup_get_version,              &
-    &                                 comin_descrdata_get_domain, comin_descrdata_get_global,           &
-    &                                 EP_SECONDARY_CONSTRUCTOR, EP_ATM_INIT_FINALIZE, EP_DESTRUCTOR,    &
-    &                                 EP_ATM_MICROPHYSICS_BEFORE, EP_ATM_TURBULENCE_AFTER,              &
-    &                                 EP_ATM_NUDGING_AFTER, EP_ATM_RADIATION_BEFORE,                    &
-    &                                 EP_ATM_WRITE_OUTPUT_BEFORE, COMIN_FLAG_READ, COMIN_FLAG_WRITE,    &
-    &                                 t_comin_plugin_info, comin_current_get_plugin_info,               &
+  USE comin_plugin_interface,  ONLY : comin_callback_register, comin_var_get, t_comin_var_descriptor,     &
+    &                                 comin_parallel_get_host_mpi_comm, comin_parallel_get_host_mpi_rank, &
+    &                                 t_comin_setup_version_info, comin_setup_get_version,                &
+    &                                 comin_descrdata_get_domain, comin_descrdata_get_global,             &
+    &                                 EP_SECONDARY_CONSTRUCTOR, EP_ATM_INIT_FINALIZE, EP_DESTRUCTOR,      &
+    &                                 EP_ATM_MICROPHYSICS_BEFORE, EP_ATM_TURBULENCE_AFTER,                &
+    &                                 EP_ATM_NUDGING_AFTER, EP_ATM_RADIATION_BEFORE,                      &
+    &                                 EP_ATM_WRITE_OUTPUT_BEFORE, COMIN_FLAG_READ, COMIN_FLAG_WRITE,      &
+    &                                 t_comin_plugin_info, comin_current_get_plugin_info,                 &
     &                                 comin_plugin_finish
 
-  USE p3plugin_global_vars,    ONLY : n_icecat, itracer_ini, l3mom_ice, lliqfrac,                       &
-    &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,       &
-    &                                 dyn_vars, mp_vars, p3_vars,                                       &
+  USE p3plugin_global_vars,    ONLY : comm_world, comm_insidenode, rank_world, rank_insidenode,           &
+    &                                 numprocs_insidenode, max_patch_size,                                &
+    &                                 node_patches_sizes, node_patches_idx,                               &
+    &                                 n_icecat, itracer_ini, l3mom_ice, lliqfrac,                         &
+    &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,         &
+    &                                 dyn_vars, mp_vars, p3_vars,                                         &
     &                                 icon_tracer, icon_tracer_ddt_turb, p3_tracer, p3_tracer_ddt_turb
   USE p3plugin_utils,          ONLY : create_var, create_tracer
   USE p3plugin_tracer_init,    ONLY : init_p3_and_tracer
@@ -36,12 +40,18 @@ CONTAINS
   SUBROUTINE comin_main()  BIND(C)
     TYPE(t_comin_setup_version_info) :: version
     TYPE(t_comin_plugin_info)        :: this_plugin
-    INTEGER                          :: rank, i_icecat, funit
+    INTEGER                          :: k, ierr, loc_patch_size, funit, i_icecat
     CHARACTER(20)                    :: icecat_name, unit_name
     CHARACTER(99)                    :: icon_namelist_name
     LOGICAL                          :: ltracer_turb
+    INTEGER, ALLOCATABLE             :: idxmap(:), idxvec_local(:), idxvec_global_padded(:)
 
-    rank = comin_parallel_get_host_mpi_rank()
+    comm_world = comin_parallel_get_host_mpi_comm()
+    rank_world = comin_parallel_get_host_mpi_rank()
+
+    CALL MPI_Comm_split_type(comm_world, MPI_COMM_TYPE_SHARED, rank_world, MPI_INFO_NULL, comm_insidenode, ierr)
+    CALL MPI_Comm_rank(comm_insidenode, rank_insidenode, ierr)
+    CALL MPI_Comm_size(comm_insidenode, numprocs_insidenode, ierr)
 
     version = comin_setup_get_version()
     IF (version%version_no_major > 1)  THEN
@@ -50,10 +60,30 @@ CONTAINS
 
     ! print plugin id
     CALL comin_current_get_plugin_info(this_plugin)
-    IF (rank == 0) WRITE (0,'(a,a,a,i4)') ' comin plugin ', this_plugin%name, ' has id: ', this_plugin%id
+    IF (rank_world == 0) WRITE (0,'(a,a,a,i4)') ' comin plugin ', this_plugin%name, ' has id: ', this_plugin%id
 
     p_global => comin_descrdata_get_global()
     p_patch  => comin_descrdata_get_domain(1)
+
+    idxvec_local = [(k, k=1, p_patch%cells%ncells)]
+    loc_patch_size = size(idxvec_local)
+
+    CALL MPI_Allreduce(loc_patch_size, max_patch_size, 1, MPI_INT, MPI_MAX, comm_insidenode, ierr)
+
+    ALLOCATE(idxvec_global_padded(max_patch_size))
+    ALLOCATE(node_patches_sizes(numprocs_insidenode))
+    ALLOCATE(node_patches_idx(max_patch_size, numprocs_insidenode))
+
+    idxvec_global_padded(1:loc_patch_size) = p_patch%cells%glb_index(idxvec_local)
+    idxvec_global_padded(loc_patch_size+1:max_patch_size) = -1    ! pad index array with negative numbers
+
+    CALL MPI_Allgather(loc_patch_size,     1, MPI_INT, &
+      &                node_patches_sizes, 1, MPI_INT, comm_insidenode, ierr)
+    IF (ierr /= 0) CALL comin_plugin_finish('gathering node patches sizes (p3plugin)', 'failed!')
+
+    CALL MPI_Allgather(idxvec_global_padded, max_patch_size, MPI_INT, &
+      &                node_patches_idx,     max_patch_size, MPI_INT, comm_insidenode, ierr)
+    IF (ierr /= 0) CALL comin_plugin_finish('gathering global indices of patches (p3plugin)', 'failed!')
 
 
     ! change name of main nwp namelist here (&master_model_nml:model_namelist_filename):
@@ -64,10 +94,10 @@ CONTAINS
     READ(funit, nml=p3_nml)
     CLOSE(funit)
 
-    IF (rank == 0) WRITE (0,'(a)') ' read P3 settings:'
-    IF (rank == 0) WRITE (0,'(a,i1)') ' n_icecat  = ', n_icecat
-    IF (rank == 0) WRITE (0,'(a,l)') ' l3mom_ice =', l3mom_ice
-    IF (rank == 0) WRITE (0,'(a,l)') ' lliqfrac  =', lliqfrac
+    IF (rank_world == 0) WRITE (0,'(a)') ' read P3 settings:'
+    IF (rank_world == 0) WRITE (0,'(a,i1)') ' n_icecat  = ', n_icecat
+    IF (rank_world == 0) WRITE (0,'(a,l)') ' l3mom_ice =', l3mom_ice
+    IF (rank_world == 0) WRITE (0,'(a,l)') ' lliqfrac  =', lliqfrac
 
     ALLOCATE(p3_vars(n_icecat))
     ALLOCATE(p3_tracer(n_icecat))
@@ -167,10 +197,10 @@ CONTAINS
     INTEGER       :: FR = COMIN_FLAG_READ
     INTEGER       :: FW = COMIN_FLAG_WRITE
     INTEGER       :: id = 1
-    INTEGER       :: rank, i_icecat
+    INTEGER       :: i_icecat
     CHARACTER(20) :: icecat_name
 
-    IF (rank == 0) WRITE (0,*) 'run secondary constructor'
+    IF (rank_world == 0) WRITE (0,*) 'run secondary constructor'
 
     CALL comin_var_get([ep_init], t_comin_var_descriptor('z_mc', id), FR, dyn_vars%hfl)
     CALL comin_var_get([ep_mp], t_comin_var_descriptor('ddqz_z_full', id), FR, dyn_vars%dz)

@@ -51,7 +51,7 @@ target_link_libraries(p3plugin_types PRIVATE ComIn::ComIn)
 target_link_libraries(p3plugin_global_vars PRIVATE p3plugin_types ComIn::ComIn)
 target_link_libraries(p3plugin_utils PRIVATE ComIn::ComIn)
 
-target_link_libraries(p3plugin_tracer_init PRIVATE p3_main p3plugin_global_vars p3plugin_types ComIn::ComIn NetCDF::NetCDF_Fortran)
+target_link_libraries(p3plugin_tracer_init PRIVATE p3_main p3plugin_global_vars p3plugin_types p3plugin_utils ComIn::ComIn NetCDF::NetCDF_Fortran)
 target_link_libraries(p3plugin_tracer_lbc PRIVATE p3plugin_global_vars p3plugin_types ComIn::ComIn)
 target_link_libraries(p3plugin_add_tendencies PRIVATE p3plugin_global_vars p3plugin_types ComIn::ComIn)
 

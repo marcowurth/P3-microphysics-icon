@@ -8,6 +8,8 @@ MODULE p3plugin_global_vars
   IMPLICIT NONE
   PRIVATE
 
+  PUBLIC :: comm_world, comm_insidenode, rank_world, rank_insidenode
+  PUBLIC :: numprocs_insidenode, max_patch_size, node_patches_sizes, node_patches_idx
   PUBLIC :: n_icecat, itracer_ini, fastphystep, dtime
   PUBLIC :: l3mom_ice, lliqfrac
   PUBLIC :: tracer_ini_filename, lookup_tables_path
@@ -17,10 +19,15 @@ MODULE p3plugin_global_vars
   PUBLIC :: icon_tracer_ddt_turb, p3_tracer_ddt_turb
 
 
+  INTEGER        :: comm_world, comm_insidenode, rank_world, rank_insidenode
+  INTEGER        :: numprocs_insidenode, max_patch_size
   INTEGER        :: n_icecat, itracer_ini, fastphystep
   REAL           :: dtime
   LOGICAL        :: l3mom_ice, lliqfrac
   CHARACTER(999) :: tracer_ini_filename, lookup_tables_path
+
+  INTEGER, ALLOCATABLE :: node_patches_sizes(:)
+  INTEGER, ALLOCATABLE :: node_patches_idx(:, :)
 
   TYPE(t_comin_descrdata_global), POINTER :: p_global
   TYPE(t_comin_descrdata_domain), POINTER :: p_patch
