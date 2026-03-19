@@ -557,9 +557,9 @@ CONTAINS
       IF (ierr /= 0) CALL comin_plugin_finish('MPI_Scatter(hhl_patches_padded, ...) (p3plugin)', 'failed!')
     END DO
 
-    ! finish = MPI_Wtime()
-    ! IF (rank_insidenode == 0) &
-    !  & WRITE (0,'(a,i3,a,F5.3,a)') 'communicating fields with rank_world ', rank_world, ' completed in ', finish - start, 'sec'
+    finish = MPI_Wtime()
+    IF (rank_insidenode == 0) &
+     & WRITE (0,'(a,i3,a,F5.3,a)') 'communicating fields with rank_world ', rank_world, ' completed in ', finish - start, 'sec'
 
     ! vertical interpolate from inlevs to model outlevs
     ALLOCATE(hfl_1d_inlevs(nlev_in))
@@ -591,11 +591,10 @@ CONTAINS
     INTEGER, INTENT(IN)      :: ncid
     REAL, INTENT(INOUT)      :: var_patches_padded(:, :, :)
 
-    INTEGER                  :: nc_status, varid, xtype, ndims, natts, dimpos_time, dimpos_ncells, nlev
-    INTEGER                  :: i, idx_start, idx_end, idx_count, max_slab_size
+    INTEGER                  :: i, nc_status, varid, xtype, ndims, natts, ncells_global, dimpos_time, dimpos_ncells, nlev
+    INTEGER                  :: read_start(3), read_count(3)
     INTEGER                  :: dimids(NF90_MAX_VAR_DIMS), dimlen(NF90_MAX_VAR_DIMS)
-    INTEGER, ALLOCATABLE     :: idxvec_patch(:), read_start(:), read_count(:)
-    INTEGER, ALLOCATABLE     :: var_read_slab_first(:, :), var_read_slab_last(:, :)
+    INTEGER, ALLOCATABLE     :: varglobal_read_first(:, :), varglobal_read_last(:, :)
     REAL                     :: fillval
     CHARACTER(30)            :: varname_dummy, dimname
     LOGICAL                  :: ncells_first
@@ -632,12 +631,12 @@ CONTAINS
       dimpos_ncells = 0
       DO i = 1, 2
         nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-        !WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
         IF (TRIM(dimname) == 'time') THEN
           CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
                                  & 'Found dimension "time" in 2d array: ' // TRIM(varname))
         ELSE IF (TRIM(dimname) == 'ncells') THEN
           dimpos_ncells = i
+          ncells_global = dimlen(i)
         ELSE
           nlev = dimlen(i)
         ENDIF
@@ -646,61 +645,36 @@ CONTAINS
       IF (dimpos_ncells == 0) &
         & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
                                  & 'Could not find dimension "ncells" in:' // TRIM(varname))
+      IF (ncells_global /= p_patch%cells%ncells_global) &
+        & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                                 & 'ncells number of ini file does not match with model!')
 
-      ALLOCATE(idxvec_patch(max_patch_size))
-      ALLOCATE(read_start(2))
-      ALLOCATE(read_count(2))
-
-      max_slab_size = 1
-      DO i = 1, numprocs_insidenode
-        idxvec_patch(1:node_patches_sizes(i)) = node_patches_idx(1:node_patches_sizes(i), i)
-        idx_start = minval(idxvec_patch(1:node_patches_sizes(i)))
-        idx_end = maxval(idxvec_patch(1:node_patches_sizes(i)))
-        IF (idx_end-idx_start+1 > max_slab_size) max_slab_size = idx_end-idx_start+1
-      END DO
-
-      ALLOCATE(var_read_slab_first(max_slab_size, nlev))
-      ALLOCATE(var_read_slab_last(nlev, max_slab_size))
-
-      DO i = 1, numprocs_insidenode
-        idx_start = minval(idxvec_patch(1:node_patches_sizes(i)))
-        idx_end = maxval(idxvec_patch(1:node_patches_sizes(i)))
-        idx_count = idx_end-idx_start+1
-
-        SELECT CASE (dimpos_ncells)
-        CASE (1)
-          read_start = (/ idx_start,  1   /)
-          read_count = (/ idx_count, nlev /)
-          ncells_first = .TRUE.
-        CASE (2)
-          read_start = (/  1,   idx_start /)
-          read_count = (/ nlev, idx_count /)
-          ncells_first = .FALSE.
-        END SELECT
-
-        IF (ncells_first) THEN
-          nc_status = nf90_get_var(ncid, varid, var_read_slab_first(1:idx_count, :),  &
-            &                      start = read_start, count = read_count)
+      SELECT CASE (dimpos_ncells)
+      CASE (1)
+        ALLOCATE(varglobal_read_first(ncells_global, nlev))
+        nc_status = nf90_get_var(ncid, varid, varglobal_read_first)
+        DO i = 1, numprocs_insidenode
           var_patches_padded(1:node_patches_sizes(i), :, i) &
-            &  = var_read_slab_first(idxvec_patch(1:node_patches_sizes(i))-idx_start+1, :)
-        ELSE
-          nc_status = nf90_get_var(ncid, varid, var_read_slab_last(:, 1:idx_count),   &
-            &                      start = read_start, count = read_count)
+            &  = varglobal_read_first(node_patches_idx(1:node_patches_sizes(i), i), :)
+          var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
+        END DO
+        DEALLOCATE(varglobal_read_first)
+      CASE (2)
+        ALLOCATE(varglobal_read_last(nlev, ncells_global))
+        nc_status = nf90_get_var(ncid, varid, varglobal_read_last)
+        DO i = 1, numprocs_insidenode
           var_patches_padded(1:node_patches_sizes(i), :, i) &
-            &  = var_read_slab_last(:, idxvec_patch(1:node_patches_sizes(i))-idx_start+1)
-        END IF
-
-        var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
-      END DO
-
-      DEALLOCATE(idxvec_patch, read_start, read_count, var_read_slab_first, var_read_slab_last)
+            &  = varglobal_read_last(:, node_patches_idx(1:node_patches_sizes(i), i))
+          var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
+        END DO
+        DEALLOCATE(varglobal_read_last)
+      END SELECT
 
     CASE (3)
       dimpos_time = 0
       dimpos_ncells = 0
       DO i = 1, 3
         nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-        !WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
         IF (TRIM(dimname) == 'time') THEN
           dimpos_time = i
           IF (dimlen(i) > 1) THEN
@@ -708,6 +682,7 @@ CONTAINS
           ENDIF
         ELSE IF (TRIM(dimname) == 'ncells') THEN
           dimpos_ncells = i
+          ncells_global = dimlen(i)
         ELSE
           nlev = dimlen(i)
         ENDIF
@@ -719,77 +694,58 @@ CONTAINS
       IF (dimpos_ncells == 0) &
         & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
                                  & 'Could not find dimension "ncells" in:' // TRIM(varname))
+      IF (ncells_global /= p_patch%cells%ncells_global) &
+        & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                                 & 'ncells number of ini file does not match with model!')
 
-      ALLOCATE(idxvec_patch(max_patch_size))
-      ALLOCATE(read_start(3))
-      ALLOCATE(read_count(3))
-
-      max_slab_size = 1
-      DO i = 1, numprocs_insidenode
-        idxvec_patch(1:node_patches_sizes(i)) = node_patches_idx(1:node_patches_sizes(i), i)
-        idx_start = minval(idxvec_patch(1:node_patches_sizes(i)))
-        idx_end = maxval(idxvec_patch(1:node_patches_sizes(i)))
-        IF (idx_end-idx_start+1 > max_slab_size) max_slab_size = idx_end-idx_start+1
-      END DO
-
-      ALLOCATE(var_read_slab_first(max_slab_size, nlev))
-      ALLOCATE(var_read_slab_last(nlev, max_slab_size))
-
-      DO i = 1, numprocs_insidenode
-        idx_start = minval(idxvec_patch(1:node_patches_sizes(i)))
-        idx_end = maxval(idxvec_patch(1:node_patches_sizes(i)))
-        idx_count = idx_end-idx_start+1
-
-        SELECT CASE (dimpos_ncells)
-        CASE (1)
-          SELECT CASE (dimpos_time)
-          CASE (2)
-            read_start = (/ idx_start, 1,  1   /)
-            read_count = (/ idx_count, 1, nlev /)
-          CASE (3)
-            read_start = (/ idx_start,  1,   1 /)
-            read_count = (/ idx_count, nlev, 1 /)
-          END SELECT
-          ncells_first = .TRUE.
+      read_start = (/ 1, 1, 1 /)
+      SELECT CASE (dimpos_ncells)
+      CASE (1)
+        SELECT CASE (dimpos_time)
         CASE (2)
-          SELECT CASE (dimpos_time)
-          CASE (1)
-            read_start = (/ 1, idx_start,  1   /)
-            read_count = (/ 1, idx_count, nlev /)
-            ncells_first = .TRUE.
-          CASE (3)
-            read_start = (/  1,   idx_start, 1 /)
-            read_count = (/ nlev, idx_count, 1 /)
-            ncells_first = .FALSE.
-          END SELECT
+          read_count = (/ ncells_global, 1, nlev /)
         CASE (3)
-          SELECT CASE (dimpos_time)
-          CASE (1)
-            read_start = (/ 1,  1,   idx_start /)
-            read_count = (/ 1, nlev, idx_count /)
-          CASE (2)
-            read_start = (/  1,   1, idx_start /)
-            read_count = (/ nlev, 1, idx_count /)
-          END SELECT
+          read_count = (/ ncells_global, nlev, 1 /)
+        END SELECT
+        ncells_first = .TRUE.
+      CASE (2)
+        SELECT CASE (dimpos_time)
+        CASE (1)
+          read_count = (/ 1, ncells_global, nlev /)
+          ncells_first = .TRUE.
+        CASE (3)
+          read_count = (/ nlev, ncells_global, 1 /)
           ncells_first = .FALSE.
         END SELECT
+      CASE (3)
+        SELECT CASE (dimpos_time)
+        CASE (1)
+          read_count = (/ 1, nlev, ncells_global /)
+        CASE (2)
+          read_count = (/ nlev, 1, ncells_global /)
+        END SELECT
+        ncells_first = .FALSE.
+      END SELECT
 
-        IF (ncells_first) THEN
-          nc_status = nf90_get_var(ncid, varid, var_read_slab_first(1:idx_count, :),  &
-            &                      start = read_start, count = read_count)
+      IF (ncells_first) THEN
+        ALLOCATE(varglobal_read_first(ncells_global, nlev))
+        nc_status = nf90_get_var(ncid, varid, varglobal_read_first, start=read_start, count=read_count)
+        DO i = 1, numprocs_insidenode
           var_patches_padded(1:node_patches_sizes(i), :, i) &
-            &  = var_read_slab_first(idxvec_patch(1:node_patches_sizes(i))-idx_start+1, :)
-        ELSE
-          nc_status = nf90_get_var(ncid, varid, var_read_slab_last(:, 1:idx_count),   &
-            &                      start = read_start, count = read_count)
+            &  = varglobal_read_first(node_patches_idx(1:node_patches_sizes(i), i), :)
+          var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
+        END DO
+        DEALLOCATE(varglobal_read_first)
+      ELSE
+        ALLOCATE(varglobal_read_last(nlev, ncells_global))
+        nc_status = nf90_get_var(ncid, varid, varglobal_read_last, start=read_start, count=read_count)
+        DO i = 1, numprocs_insidenode
           var_patches_padded(1:node_patches_sizes(i), :, i) &
-            &  = var_read_slab_last(:, idxvec_patch(1:node_patches_sizes(i))-idx_start+1)
-        END IF
-
-        var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
-      END DO
-
-      DEALLOCATE(idxvec_patch, read_start, read_count, var_read_slab_first, var_read_slab_last)
+            &  = varglobal_read_last(:, node_patches_idx(1:node_patches_sizes(i), i))
+          var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
+        END DO
+        DEALLOCATE(varglobal_read_last)
+      END IF
 
     CASE (4:)
       CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
