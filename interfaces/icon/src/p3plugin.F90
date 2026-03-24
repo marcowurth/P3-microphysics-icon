@@ -30,7 +30,7 @@ MODULE p3plugin
 
   INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
 
-  NAMELIST /p3_nml/ n_icecat, l3mom_ice, lliqfrac, itracer_ini, tracer_ini_filename, lookup_tables_path
+  NAMELIST /p3_nml/ n_icecat, l3mom_ice, lliqfrac, itracer_ini, tracer_ini_filename, lookup_tables_path, autoAccr_param_in
 
 CONTAINS
 
@@ -94,10 +94,11 @@ CONTAINS
     READ(funit, nml=p3_nml)
     CLOSE(funit)
 
-    IF (rank_world == 0) WRITE (0,'(a)') ' read P3 settings:'
-    IF (rank_world == 0) WRITE (0,'(a,i1)') ' n_icecat  = ', n_icecat
-    IF (rank_world == 0) WRITE (0,'(a,l)') ' l3mom_ice =', l3mom_ice
-    IF (rank_world == 0) WRITE (0,'(a,l)') ' lliqfrac  =', lliqfrac
+    IF (rank_world == 0) WRITE (0,'(a)')    ' read P3 settings:'
+    IF (rank_world == 0) WRITE (0,'(a,i1)') ' n_icecat  =', n_icecat
+    IF (rank_world == 0) WRITE (0,'(a,l)')  ' l3mom_ice =', l3mom_ice
+    IF (rank_world == 0) WRITE (0,'(a,l)')  ' lliqfrac  =', lliqfrac
+    IF (rank_world == 0) WRITE (0,'(a,l)')  ' autoAccr_param_in  =', autoAccr_param_in
 
     ALLOCATE(p3_vars(n_icecat))
     ALLOCATE(p3_tracer(n_icecat))
