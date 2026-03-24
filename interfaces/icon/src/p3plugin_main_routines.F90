@@ -105,6 +105,11 @@ CONTAINS
     CALL mp_vars%dhmax%to_3d(mp_vars_3d%dhmax)
     CALL mp_vars%dhmax_ground%to_3d(mp_vars_3d%dhmax_ground)
     CALL mp_vars%ze_p3%to_3d(mp_vars_3d%ze_p3)
+!! JM_20260323 >> adding new diagnostics
+    ! collection (warm)
+    CALL mp_vars%d_qr_ac%to_3d(mp_vars_3d%d_qr_ac)
+    CALL mp_vars%d_qr_acc%to_3d(mp_vars_3d%d_qr_acc)
+!! << JM_20260323
 
     CALL mp_vars%prec_gsp_rate%to_3d(mp_vars_3d%prec_gsp_rate)
     CALL mp_vars%rain_gsp_rate%to_3d(mp_vars_3d%rain_gsp_rate)
@@ -142,7 +147,9 @@ CONTAINS
 
 
     n_diag_2d = 1  ! not used
-    n_diag_3d = 2  ! diag_3d contains dmean_c, dmean_r
+!! JM_20260323 >> adding new diagnostics (changed 2-->3)
+    n_diag_3d = 4  ! diag_3d contains dmean_c, dmean_r, d_qr_ac, d_qr_acc
+!! << JM_20260323
     ALLOCATE(diag_2d(p_global%nproma, p_patch%cells%nblks, n_diag_2d))
     ALLOCATE(diag_3d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_diag_3d))
 
@@ -320,6 +327,11 @@ CONTAINS
     ! update microphysical vars
     mp_vars_3d%dmean_c = diag_3d(:,:,:,1)
     mp_vars_3d%dmean_r = diag_3d(:,:,:,2)
+!! JM_20260323 >> adding new diagnostics
+    ! collection (warm)
+    mp_vars_3d%d_qr_ac  = diag_3d(:,:,:,3)
+    mp_vars_3d%d_qr_acc = diag_3d(:,:,:,4)
+!! JM_20260323
     mp_vars_3d%deff_c = diag_effc_3d * 2.
 
     IF (n_icecat == 1) THEN

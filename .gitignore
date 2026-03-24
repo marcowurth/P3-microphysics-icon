@@ -5,4 +5,4 @@ attic
 work*
 old_versions
 .vscode
-*p3_lookupTable_*.dat*
+lookup_tables/*.dat-v*

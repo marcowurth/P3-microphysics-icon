@@ -106,7 +106,6 @@ CONTAINS
 
 
     ! create new vars in ICON
-
     CALL create_var('theta_old', 'K', '3d', 'dp')
     CALL create_var('qv_old', 'kg kg-1', '3d', 'dp')
     CALL create_var('ddt_temp_phys', 'K s-1', '3d', 'dp')
@@ -119,6 +118,11 @@ CONTAINS
     CALL create_var('dhmax', 'm', '3d', 'dp')
     CALL create_var('dhmax_ground', 'm', '2d', 'dp')
     CALL create_var('ze_p3', 'dBZ', '3d', 'dp')
+!! JM_20260323 >> adding new diagnostic
+    ! collection (warm)
+    CALL create_var('d_qr_ac',  'kg kg-1', '3d', 'dp')
+    CALL create_var('d_qr_acc', 'kg kg-1', '3d', 'dp')
+!! << JM_20260323
 
     DO i_icecat = 1, n_icecat
       WRITE(icecat_name, '(a,i0)') 'dmean_i', i_icecat
@@ -233,6 +237,11 @@ CONTAINS
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('dhmax', id), IOR(FR, FW), mp_vars%dhmax)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('dhmax_ground', id), IOR(FR, FW), mp_vars%dhmax_ground)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('ze_p3', id), IOR(FR, FW), mp_vars%ze_p3)
+!! JM_20260323 >> adding new diagnostics
+    ! collection (warm)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qr_ac',  id), IOR(FR, FW), mp_vars%d_qr_ac)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qr_acc', id), IOR(FR, FW), mp_vars%d_qr_acc)
+!! << JM_20260323
 
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prec_gsp_rate', id), IOR(FR, FW), mp_vars%prec_gsp_rate)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('rain_gsp_rate', id), IOR(FR, FW), mp_vars%rain_gsp_rate)

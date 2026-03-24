@@ -3830,7 +3830,9 @@ call cpu_time(timer_start(3))
 
              ncautc = merge(0., ncautc, qcaut.eq.0.)
              qcaut  = merge(0., qcaut,  ncautc.eq.0.)
-
+!! JM_20260323 >> adding diagnostic
+             diag_3d(i,k,3) = diag_3d(i,k,3) + qcaut
+!! << JM_20260323
           endif qc_not_small_1
 
    !............................
@@ -3875,7 +3877,9 @@ call cpu_time(timer_start(3))
              endif
              ncacc = merge(0., ncacc, qcacc.eq.0.)
              qcacc = merge(0., qcacc, ncacc.eq.0.)
-
+!! JM_20260323 >> adding diagnostic
+             diag_3d(i,k,4) = diag_3d(i,k,4) + qcacc
+!! << JM_20260323
           endif
 
    !.....................................

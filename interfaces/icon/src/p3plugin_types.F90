@@ -29,6 +29,9 @@ MODULE p3plugin_types
     TYPE(t_comin_var_handle)            :: prec_gsp_rate, rain_gsp_rate, snow_gsp_rate, ice_gsp_rate
     TYPE(t_comin_var_handle)            :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp, ice_gsp
     TYPE(t_comin_var_handle)            :: q_sedim, twater
+!! JM_20260323 >> adding new diagnostics
+    TYPE(t_comin_var_handle)            :: d_qr_ac, d_qr_acc ! collection (warm)
+!! << JM_20260323
   END type t_mp_vars_handle
 
   TYPE :: t_mp_vars_3dptr
@@ -37,6 +40,9 @@ MODULE p3plugin_types
     REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp_rate, rain_gsp_rate, snow_gsp_rate, ice_gsp_rate
     REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp, ice_gsp
     REAL(wp), POINTER, DIMENSION(:,:,:) :: q_sedim, twater
+!! JM_20260323 >> adding new diagnostics
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qr_ac, d_qr_acc ! collection (warm)
+!! << JM_20260323
   CONTAINS
     PROCEDURE :: nullify => nullify_mp_vars_3dptr
   END type t_mp_vars_3dptr
@@ -87,6 +93,9 @@ CONTAINS
     NULLIFY(this%prec_gsp_rate, this%rain_gsp_rate, this%snow_gsp_rate, this%ice_gsp_rate)
     NULLIFY(this%prec_gsp, this%prec_gsp_d, this%rain_gsp, this%snow_gsp, this%ice_gsp)
     NULLIFY(this%q_sedim, this%twater)
+!! JM_20260323 >> adding new diagnostics
+    NULLIFY(this%d_qr_ac, this%d_qr_acc) ! collection (warm)
+!! << JM_20260323
   END SUBROUTINE nullify_mp_vars_3dptr
 
   SUBROUTINE nullify_p3_vars_3dptr(this)
