@@ -17,6 +17,7 @@ MODULE p3plugin_global_vars
   PUBLIC :: dyn_vars, mp_vars, p3_vars
   PUBLIC :: icon_tracer, p3_tracer
   PUBLIC :: icon_tracer_ddt_turb, p3_tracer_ddt_turb
+  PUBLIC :: autoAccr_param_in
 
 
   INTEGER        :: comm_world, comm_insidenode, rank_world, rank_insidenode
@@ -25,6 +26,7 @@ MODULE p3plugin_global_vars
   REAL           :: dtime
   LOGICAL        :: l3mom_ice, lliqfrac
   CHARACTER(999) :: tracer_ini_filename, lookup_tables_path
+  INTEGER        :: autoAccr_param_in
 
   INTEGER, ALLOCATABLE :: node_patches_sizes(:)
   INTEGER, ALLOCATABLE :: node_patches_idx(:, :)

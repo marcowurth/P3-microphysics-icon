@@ -68,7 +68,7 @@ CONTAINS
 
     IF (rank_world == 0) WRITE (0,*) 'call p3_init'
 
-    CALL p3_init(TRIM(lookup_tables_path), n_icecat, l3mom_ice, lliqfrac, model, stat, abort_on_err, dowr)
+    CALL p3_init(TRIM(lookup_tables_path), n_icecat, l3mom_ice, lliqfrac, model, stat, abort_on_err, dowr, autoAccr_param_in)
     IF (stat /= status_ok) CALL comin_plugin_finish('init_p3_and_tracer (p3plugin)', 'calling failed!')
 
     dtime = comin_descrdata_get_timesteplength(1)
