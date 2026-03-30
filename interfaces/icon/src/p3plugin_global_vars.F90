@@ -26,7 +26,7 @@ MODULE p3plugin_global_vars
   REAL           :: dtime
   LOGICAL        :: l3mom_ice, lliqfrac
   CHARACTER(999) :: tracer_ini_filename, lookup_tables_path
-  INTEGER        :: autoAccr_param_in
+  INTEGER        :: autoAccr_param_in = 2 ! default value is set here, unless it will be initialized with 0 of no value is given in the p3-nml bliock
 
   INTEGER, ALLOCATABLE :: node_patches_sizes(:)
   INTEGER, ALLOCATABLE :: node_patches_idx(:, :)

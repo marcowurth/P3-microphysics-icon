@@ -17,7 +17,7 @@ MODULE p3plugin
   USE p3plugin_global_vars,    ONLY : comm_world, comm_insidenode, rank_world, rank_insidenode,           &
     &                                 numprocs_insidenode, max_patch_size,                                &
     &                                 node_patches_sizes, node_patches_idx,                               &
-    &                                 n_icecat, itracer_ini, l3mom_ice, lliqfrac,                         &
+    &                                 n_icecat, itracer_ini, l3mom_ice, lliqfrac, autoAccr_param_in,      &
     &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,         &
     &                                 dyn_vars, mp_vars, p3_vars,                                         &
     &                                 icon_tracer, icon_tracer_ddt_turb, p3_tracer, p3_tracer_ddt_turb
@@ -98,7 +98,7 @@ CONTAINS
     IF (rank_world == 0) WRITE (0,'(a,i1)') ' n_icecat  =', n_icecat
     IF (rank_world == 0) WRITE (0,'(a,l)')  ' l3mom_ice =', l3mom_ice
     IF (rank_world == 0) WRITE (0,'(a,l)')  ' lliqfrac  =', lliqfrac
-    IF (rank_world == 0) WRITE (0,'(a,l)')  ' autoAccr_param_in  =', autoAccr_param_in
+    IF (rank_world == 0) WRITE (0,'(a,i1)') ' autoAccr_param_in  =', autoAccr_param_in
 
     ALLOCATE(p3_vars(n_icecat))
     ALLOCATE(p3_tracer(n_icecat))

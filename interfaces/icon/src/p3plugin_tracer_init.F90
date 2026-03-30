@@ -18,7 +18,7 @@ MODULE p3plugin_tracer_init
     &                                 node_patches_sizes, node_patches_idx,                                 &
     &                                 dtime, fastphystep, n_icecat, itracer_ini, l3mom_ice, lliqfrac,       &
     &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,           &
-    &                                 dyn_vars, icon_tracer, mp_vars, p3_tracer
+    &                                 dyn_vars, icon_tracer, mp_vars, p3_tracer, autoAccr_param_in
 
   USE microphy_p3,             ONLY : p3_init, status_ok
 
