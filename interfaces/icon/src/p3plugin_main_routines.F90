@@ -106,9 +106,26 @@ CONTAINS
     CALL mp_vars%dhmax_ground%to_3d(mp_vars_3d%dhmax_ground)
     CALL mp_vars%ze_p3%to_3d(mp_vars_3d%ze_p3)
 !! JM_20260323 >> adding new diagnostics
+    ! --- warm-rain processes rates ---
+    ! nucleation
+    CALL mp_vars%d_qcnuc%to_3d(mp_vars_3d%d_qcnuc)
+    CALL mp_vars%d_ncnuc%to_3d(mp_vars_3d%d_ncnuc)
+    ! condensation
+    CALL mp_vars%d_qccon%to_3d(mp_vars_3d%d_qccon)
+    CALL mp_vars%d_qrcon%to_3d(mp_vars_3d%d_qrcon)
+    ! evaporation
+    CALL mp_vars%d_qcevp%to_3d(mp_vars_3d%d_qcevp)
+    CALL mp_vars%d_qrevp%to_3d(mp_vars_3d%d_qrevp)
+    CALL mp_vars%d_nrevp%to_3d(mp_vars_3d%d_nrevp)
     ! collection (warm)
-    CALL mp_vars%d_qr_ac%to_3d(mp_vars_3d%d_qr_ac)
-    CALL mp_vars%d_qr_acc%to_3d(mp_vars_3d%d_qr_acc)
+    CALL mp_vars%d_qcacc%to_3d(mp_vars_3d%d_qcacc)
+    CALL mp_vars%d_ncacc%to_3d(mp_vars_3d%d_ncacc)
+    CALL mp_vars%d_qcaut%to_3d(mp_vars_3d%d_qcaut)
+    CALL mp_vars%d_ncautc%to_3d(mp_vars_3d%d_ncautc)
+    CALL mp_vars%d_ncautr%to_3d(mp_vars_3d%d_ncautr)
+    ! self-collection
+    CALL mp_vars%d_ncslf%to_3d(mp_vars_3d%d_ncslf)
+    CALL mp_vars%d_nrslf%to_3d(mp_vars_3d%d_nrslf)
 !! << JM_20260323
 
     CALL mp_vars%prec_gsp_rate%to_3d(mp_vars_3d%prec_gsp_rate)
@@ -147,9 +164,7 @@ CONTAINS
 
 
     n_diag_2d = 1  ! not used
-!! JM_20260323 >> adding new diagnostics (changed 2-->3)
-    n_diag_3d = 4  ! diag_3d contains dmean_c, dmean_r, d_qr_ac, d_qr_acc
-!! << JM_20260323
+    n_diag_3d = 16 ! diag_3d contains dmean_c, dmean_r, .... JM: changed from 2-->16
     ALLOCATE(diag_2d(p_global%nproma, p_patch%cells%nblks, n_diag_2d))
     ALLOCATE(diag_3d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_diag_3d))
 
@@ -328,9 +343,26 @@ CONTAINS
     mp_vars_3d%dmean_c = diag_3d(:,:,:,1)
     mp_vars_3d%dmean_r = diag_3d(:,:,:,2)
 !! JM_20260323 >> adding new diagnostics
+    ! --- warm-rain processes rates ---
+    ! nucleation
+    mp_vars_3d%d_qcnuc   = diag_3d(:,:,:,3)
+    mp_vars_3d%d_ncnuc   = diag_3d(:,:,:,4)
+    ! condensation
+    mp_vars_3d%d_qccon   = diag_3d(:,:,:,5)
+    mp_vars_3d%d_qrcon   = diag_3d(:,:,:,6)
+    ! evaporation
+    mp_vars_3d%d_qcevp   = diag_3d(:,:,:,7)
+    mp_vars_3d%d_qrevp   = diag_3d(:,:,:,8)
+    mp_vars_3d%d_nrevp   = diag_3d(:,:,:,9)
     ! collection (warm)
-    mp_vars_3d%d_qr_ac  = diag_3d(:,:,:,3)
-    mp_vars_3d%d_qr_acc = diag_3d(:,:,:,4)
+    mp_vars_3d%d_qcacc   = diag_3d(:,:,:,10)
+    mp_vars_3d%d_ncacc   = diag_3d(:,:,:,11)
+    mp_vars_3d%d_qcaut   = diag_3d(:,:,:,12)
+    mp_vars_3d%d_ncautc  = diag_3d(:,:,:,13)
+    mp_vars_3d%d_ncautr  = diag_3d(:,:,:,14)
+    ! self-collection
+    mp_vars_3d%d_ncslf   = diag_3d(:,:,:,15)
+    mp_vars_3d%d_nrslf   = diag_3d(:,:,:,16)
 !! JM_20260323
     mp_vars_3d%deff_c = diag_effc_3d * 2.
 

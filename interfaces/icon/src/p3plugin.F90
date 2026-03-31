@@ -119,9 +119,26 @@ CONTAINS
     CALL create_var('dhmax_ground', 'm', '2d', 'dp')
     CALL create_var('ze_p3', 'dBZ', '3d', 'dp')
 !! JM_20260323 >> adding new diagnostic
+    ! --- warm-rain process rates ---
+    ! nucleation
+    CALL create_var('d_qcnuc',       'kg kg-1', '3d', 'dp') ! activation of cloud droplets from CCN
+    CALL create_var('d_ncnuc',       '#  kg-1', '3d', 'dp') ! change in cloud droplet number from activation of CCN
+    ! condensation
+    CALL create_var('d_qccon',       'kg kg-1', '3d', 'dp') ! cloud droplet condensation
+    CALL create_var('d_qrcon',       'kg kg-1', '3d', 'dp') ! rain drop condensation
+    ! evaporation
+    CALL create_var('d_qcevp',       'kg kg-1', '3d', 'dp') ! cloud droplet evaporation
+    CALL create_var('d_qrevp',       'kg kg-1', '3d', 'dp') ! rain evaporation
+    CALL create_var('d_nrevp',       '#  kg-1', '3d', 'dp') ! change in rain drop number from evaporation
     ! collection (warm)
-    CALL create_var('d_qr_ac',  'kg kg-1', '3d', 'dp')
-    CALL create_var('d_qr_acc', 'kg kg-1', '3d', 'dp')
+    CALL create_var('d_qcacc',       'kg kg-1', '3d', 'dp') ! cloud droplet accretion (acc) by rain
+    CALL create_var('d_ncacc',       '#  kg-1', '3d', 'dp') ! change in cloud droplet number from accretion by rain
+    CALL create_var('d_qcaut',       'kg kg-1', '3d', 'dp') ! cloud droplet autoconversion (aut) to rain
+    CALL create_var('d_ncautc',      '#  kg-1', '3d', 'dp') ! change in cloud droplet number from autoconversion
+    CALL create_var('d_ncautr',      '#  kg-1', '3d', 'dp') ! change in rain drop number from autoconversion of cloud water
+    ! self-collection
+    CALL create_var('d_ncslf',       '#  kg-1', '3d', 'dp') ! change in cloud droplet number from self-collection
+    CALL create_var('d_nrslf',       '#  kg-1', '3d', 'dp') ! change in rain drop number from self-collection
 !! << JM_20260323
 
     DO i_icecat = 1, n_icecat
@@ -237,10 +254,27 @@ CONTAINS
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('dhmax', id), IOR(FR, FW), mp_vars%dhmax)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('dhmax_ground', id), IOR(FR, FW), mp_vars%dhmax_ground)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('ze_p3', id), IOR(FR, FW), mp_vars%ze_p3)
-!! JM_20260323 >> adding new diagnostics
+    !! JM_20260323 >> adding new diagnostics
+    ! --- warm-rain process rates ---
+    ! nucleation
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qcnuc', id),       IOR(FR, FW), mp_vars%d_qcnuc)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncnuc', id),       IOR(FR, FW), mp_vars%d_ncnuc)
+    ! condensation
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qccon', id),       IOR(FR, FW), mp_vars%d_qccon)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qrcon', id),       IOR(FR, FW), mp_vars%d_qrcon)
+    ! evaporation
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qcevp', id),       IOR(FR, FW), mp_vars%d_qcevp)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qrevp', id),       IOR(FR, FW), mp_vars%d_qrevp)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_nrevp', id),       IOR(FR, FW), mp_vars%d_nrevp)
     ! collection (warm)
-    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qr_ac',  id), IOR(FR, FW), mp_vars%d_qr_ac)
-    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qr_acc', id), IOR(FR, FW), mp_vars%d_qr_acc)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qcacc',  id),      IOR(FR, FW), mp_vars%d_qcacc)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncacc',  id),      IOR(FR, FW), mp_vars%d_ncacc)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qcaut', id),       IOR(FR, FW), mp_vars%d_qcaut)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncautc', id),      IOR(FR, FW), mp_vars%d_ncautc)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncautr', id),      IOR(FR, FW), mp_vars%d_ncautr)
+    ! self-collection
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncslf', id),       IOR(FR, FW), mp_vars%d_ncslf)
+    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_nrslf', id),       IOR(FR, FW), mp_vars%d_nrslf)
 !! << JM_20260323
 
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prec_gsp_rate', id), IOR(FR, FW), mp_vars%prec_gsp_rate)

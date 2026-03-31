@@ -3830,9 +3830,6 @@ call cpu_time(timer_start(3))
 
              ncautc = merge(0., ncautc, qcaut.eq.0.)
              qcaut  = merge(0., qcaut,  ncautc.eq.0.)
-!! JM_20260323 >> adding diagnostic
-             diag_3d(i,k,3) = diag_3d(i,k,3) + qcaut
-!! << JM_20260323
           endif qc_not_small_1
 
    !............................
@@ -3877,9 +3874,6 @@ call cpu_time(timer_start(3))
              endif
              ncacc = merge(0., ncacc, qcacc.eq.0.)
              qcacc = merge(0., qcacc, ncacc.eq.0.)
-!! JM_20260323 >> adding diagnostic
-             diag_3d(i,k,4) = diag_3d(i,k,4) + qcacc
-!! << JM_20260323
           endif
 
    !.....................................
@@ -4206,6 +4200,24 @@ call cpu_time(timer_start(3))
           ninuc  = ninuc*ratio
           ncnuc  = ncnuc*ratio
        endif
+!! JM_20260330 >> add diagnostic for qcnuc, ncnuc, qccon, qrcon, qcevp, qrevp and nrevp here since these are the final values after
+!!                  - saturation adjustment limiting
+!!                  - vapor conservation limiting
+       diag_3d(i,k,3)  = diag_3d(i,k,3)  + qcnuc
+       diag_3d(i,k,4)  = diag_3d(i,k,4)  + ncnuc
+       diag_3d(i,k,5)  = diag_3d(i,k,5)  + qccon
+       diag_3d(i,k,6)  = diag_3d(i,k,6)  + qrcon
+       diag_3d(i,k,7)  = diag_3d(i,k,7)  + qcevp
+       diag_3d(i,k,8)  = diag_3d(i,k,8)  + qrevp
+       diag_3d(i,k,9)  = diag_3d(i,k,9)  + nrevp
+       diag_3d(i,k,10) = diag_3d(i,k,10) + qcacc
+       diag_3d(i,k,11) = diag_3d(i,k,11) + ncacc
+       diag_3d(i,k,12) = diag_3d(i,k,12) + qcaut
+       diag_3d(i,k,13) = diag_3d(i,k,13) + ncautc
+       diag_3d(i,k,14) = diag_3d(i,k,14) + ncautr
+       diag_3d(i,k,15) = diag_3d(i,k,15) + ncslf
+       diag_3d(i,k,16) = diag_3d(i,k,16) + nrslf
+!! << JM_20260330
 
 !======================================================================================!
 

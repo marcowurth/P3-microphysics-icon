@@ -30,7 +30,12 @@ MODULE p3plugin_types
     TYPE(t_comin_var_handle)            :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp, ice_gsp
     TYPE(t_comin_var_handle)            :: q_sedim, twater
 !! JM_20260323 >> adding new diagnostics
-    TYPE(t_comin_var_handle)            :: d_qr_ac, d_qr_acc ! collection (warm)
+    ! --- warm-rain process rates ---
+    TYPE(t_comin_var_handle)            :: d_qcnuc, d_ncnuc  ! nucleation
+    TYPE(t_comin_var_handle)            :: d_qccon, d_qrcon  ! condensation
+    TYPE(t_comin_var_handle)            :: d_qcevp, d_qrevp, d_nrevp ! evaporation
+    TYPE(t_comin_var_handle)            :: d_qcacc, d_ncacc, d_qcaut, d_ncautc, d_ncautr ! collection (warm)
+    TYPE(t_comin_var_handle)            :: d_ncslf, d_nrslf ! self-collection
 !! << JM_20260323
   END type t_mp_vars_handle
 
@@ -41,7 +46,12 @@ MODULE p3plugin_types
     REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp, ice_gsp
     REAL(wp), POINTER, DIMENSION(:,:,:) :: q_sedim, twater
 !! JM_20260323 >> adding new diagnostics
-    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qr_ac, d_qr_acc ! collection (warm)
+    ! --- warm-rain process rates ---
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qcnuc, d_ncnuc  ! nucleation
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qccon, d_qrcon  ! condensation
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qcevp, d_qrevp, d_nrevp ! evaporation
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qcacc, d_ncacc, d_qcaut, d_ncautc, d_ncautr ! collection (warm)
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_ncslf, d_nrslf ! self-collection
 !! << JM_20260323
   CONTAINS
     PROCEDURE :: nullify => nullify_mp_vars_3dptr
@@ -94,7 +104,12 @@ CONTAINS
     NULLIFY(this%prec_gsp, this%prec_gsp_d, this%rain_gsp, this%snow_gsp, this%ice_gsp)
     NULLIFY(this%q_sedim, this%twater)
 !! JM_20260323 >> adding new diagnostics
-    NULLIFY(this%d_qr_ac, this%d_qr_acc) ! collection (warm)
+    ! --- warm-rain process rates ---
+    NULLIFY(this%d_qcnuc, this%d_ncnuc) ! nucleation
+    NULLIFY(this%d_qccon, this%d_qrcon) ! condensation
+    NULLIFY(this%d_qcevp, this%d_qrevp, this%d_nrevp) ! evaporation
+    NULLIFY(this%d_qcacc, this%d_ncacc, this%d_qcaut, this%d_ncautc, this%d_ncautr) ! collection (warm)
+    NULLIFY(this%d_ncslf, this%d_nrslf) ! self-collection
 !! << JM_20260323
   END SUBROUTINE nullify_mp_vars_3dptr
 
