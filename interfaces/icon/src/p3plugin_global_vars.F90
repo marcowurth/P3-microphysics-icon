@@ -5,6 +5,10 @@ MODULE p3plugin_global_vars
   USE p3plugin_types,          ONLY : t_dyn_vars_handle, t_mp_vars_handle, t_p3_vars_handle,   &
     &                                 t_icon_tracer_handle, t_p3_tracer_handle
 
+!! JM_20260331 >> adding new comin handle type
+  USE p3plugin_types,          ONLY : t_p3_ice_diag_handle
+!! << JM_20260331
+
   IMPLICIT NONE
   PRIVATE
 
@@ -18,7 +22,9 @@ MODULE p3plugin_global_vars
   PUBLIC :: icon_tracer, p3_tracer
   PUBLIC :: icon_tracer_ddt_turb, p3_tracer_ddt_turb
   PUBLIC :: autoAccr_param_in
-
+!! JM_20260331 >> defining new comin handle for ice-phase diagnostics
+  PUBLIC :: p3_ice_diag
+!! << JM_20260331
 
   INTEGER        :: comm_world, comm_insidenode, rank_world, rank_insidenode
   INTEGER        :: numprocs_insidenode, max_patch_size
@@ -26,7 +32,7 @@ MODULE p3plugin_global_vars
   REAL           :: dtime
   LOGICAL        :: l3mom_ice, lliqfrac
   CHARACTER(999) :: tracer_ini_filename, lookup_tables_path
-  INTEGER        :: autoAccr_param_in = 2 ! default value is set here, unless it will be initialized with 0 of no value is given in the p3-nml bliock
+  INTEGER        :: autoAccr_param_in = 2 ! default value is set here, unless it will be initialized with 0 when no value is given in the p3-nml block
 
   INTEGER, ALLOCATABLE :: node_patches_sizes(:)
   INTEGER, ALLOCATABLE :: node_patches_idx(:, :)
@@ -39,5 +45,8 @@ MODULE p3plugin_global_vars
   TYPE(t_p3_vars_handle), ALLOCATABLE   :: p3_vars(:)
   TYPE(t_icon_tracer_handle)            :: icon_tracer, icon_tracer_ddt_turb
   TYPE(t_p3_tracer_handle), ALLOCATABLE :: p3_tracer(:), p3_tracer_ddt_turb(:)
+!! JM_20260331 >> defining new comin handle for ice-phase diagnostics
+  TYPE(t_p3_ice_diag_handle), ALLOCATABLE :: p3_ice_diag(:)
+!! << JM_20260331
 
 END MODULE p3plugin_global_vars

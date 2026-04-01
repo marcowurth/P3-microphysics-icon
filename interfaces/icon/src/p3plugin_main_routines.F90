@@ -10,6 +10,11 @@ MODULE p3plugin_main_routines
 
   USE microphy_p3,             ONLY : p3_main
 
+!! JM_20230331 >> using new comin handle and pointer for ice-phase diagnostics
+  USE p3plugin_types,          ONLY : t_p3_ice_diag_3dptr
+  USE p3plugin_global_vars,    ONLY : p3_ice_diag
+!! << JM_20230331
+
   IMPLICIT NONE
   PRIVATE
 
@@ -27,12 +32,18 @@ CONTAINS
     INTEGER :: i_icecat, jg, jk, jb
     INTEGER :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
     INTEGER :: n_diag_2d, n_diag_3d
+!! JM_20260331 >> adding new integer for ice-phase diagnostics
+    INTEGER :: n_diag_4d
+!! << JM_20260331
 
     TYPE(t_dyn_vars_3dptr)    :: dyn_vars_3d
     TYPE(t_mp_vars_3dptr)     :: mp_vars_3d
     TYPE(t_p3_vars_3dptr)     :: p3_vars_3d(n_icecat)
     TYPE(t_icon_tracer_3dptr) :: icon_tracer_3d
     TYPE(t_p3_tracer_3dptr)   :: p3_tracer_3d(n_icecat)
+!! JM_20260331 >> adding new comin pointer for ice-phase diagnostics
+    TYPE(t_p3_ice_diag_3dptr) :: p3_ice_diag_3d(n_icecat)
+!! << JM_20260331
 
     REAL :: dz_3d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks)
     REAL :: temp_3d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks)
@@ -70,6 +81,9 @@ CONTAINS
     REAL :: dummysum(p_global%nproma, p_patch%nlev, p_patch%cells%nblks)
     REAL, ALLOCATABLE :: diag_2d(:,:,:)
     REAL, ALLOCATABLE :: diag_3d(:,:,:,:)
+!! JM_20260331 >> adding new 5dim array for ice-phase diagnostics
+    REAL, ALLOCATABLE :: diag_4d(:,:,:,:,:)
+!! << JM_20260331
 
     REAL :: Rd, c_pd
     REAL :: clbfact_dep = 1.0
@@ -160,6 +174,24 @@ CONTAINS
       CALL p3_vars(i_icecat)%deff_i%to_3d(p3_vars_3d(i_icecat)%deff_i)
       CALL p3_vars(i_icecat)%rho_i%to_3d(p3_vars_3d(i_icecat)%rho_i)
       CALL p3_vars(i_icecat)%vm_i%to_3d(p3_vars_3d(i_icecat)%vm_i)
+
+!! JM_20260331 >> extracting ice-phase diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
+      CALL p3_ice_diag(i_icecat)%d_qidep_%to_3d(p3_ice_diag_3d(i_icecat)%d_qidep_)
+      CALL p3_ice_diag(i_icecat)%d_qisub_%to_3d(p3_ice_diag_3d(i_icecat)%d_qisub_)
+      CALL p3_ice_diag(i_icecat)%d_qinuc_%to_3d(p3_ice_diag_3d(i_icecat)%d_qinuc_)
+      CALL p3_ice_diag(i_icecat)%d_qchetc_%to_3d(p3_ice_diag_3d(i_icecat)%d_qchetc_)
+      CALL p3_ice_diag(i_icecat)%d_qcheti_%to_3d(p3_ice_diag_3d(i_icecat)%d_qcheti_)
+      CALL p3_ice_diag(i_icecat)%d_qrhetc_%to_3d(p3_ice_diag_3d(i_icecat)%d_qrhetc_)
+      CALL p3_ice_diag(i_icecat)%d_qrheti_%to_3d(p3_ice_diag_3d(i_icecat)%d_qrheti_)
+      CALL p3_ice_diag(i_icecat)%d_qimlt_%to_3d(p3_ice_diag_3d(i_icecat)%d_qimlt_)
+      CALL p3_ice_diag(i_icecat)%d_qccol_%to_3d(p3_ice_diag_3d(i_icecat)%d_qccol_)
+      CALL p3_ice_diag(i_icecat)%d_qrcol_%to_3d(p3_ice_diag_3d(i_icecat)%d_qrcol_)
+      CALL p3_ice_diag(i_icecat)%d_qwgrth_%to_3d(p3_ice_diag_3d(i_icecat)%d_qwgrth_)
+      CALL p3_ice_diag(i_icecat)%d_qcshd_%to_3d(p3_ice_diag_3d(i_icecat)%d_qcshd_)
+      CALL p3_ice_diag(i_icecat)%d_qcmul_%to_3d(p3_ice_diag_3d(i_icecat)%d_qcmul_)
+      CALL p3_ice_diag(i_icecat)%d_qrmul_%to_3d(p3_ice_diag_3d(i_icecat)%d_qrmul_)
+      CALL p3_ice_diag(i_icecat)%d_nimul_%to_3d(p3_ice_diag_3d(i_icecat)%d_nimul_)
+!! << JM_20260331
     END DO
 
 
@@ -167,6 +199,10 @@ CONTAINS
     n_diag_3d = 16 ! diag_3d contains dmean_c, dmean_r, .... JM: changed from 2-->16
     ALLOCATE(diag_2d(p_global%nproma, p_patch%cells%nblks, n_diag_2d))
     ALLOCATE(diag_3d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_diag_3d))
+!! JM_20260331 >> integer for defining the amount of ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
+    n_diag_4d = 15
+    ALLOCATE(diag_4d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_diag_4d))
+!! << JM_20260331
 
     Rd   = 287.04
     c_pd = Rd * 3.5
@@ -181,6 +217,9 @@ CONTAINS
     diag_rhoi_4d(:,:,:,:) = 0.0
     diag_dhmax_4d(:,:,:,:) = 0.0
     diag_3d(:,:,:,:)  = 0.0
+!! JM_20260331 >> adding new diagnostics
+    diag_4d(:,:,:,:,:) = 0.0
+!! << JM_20260331
 
     ! calc theta, pres and w on full levels
     dyn_vars_3d%pres = dyn_vars_3d%rho * dyn_vars_3d%temp * Rd
@@ -294,7 +333,11 @@ CONTAINS
                    log_LiquidFrac = lliqfrac,                                                             &
                    diag_dhmax     = diag_dhmax_4d(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat),   &
                    timer          = timer,                                                                &
-                   timer_description = timer_description                                                  &
+                   timer_description = timer_description,                                                 &
+!! JM_20260331 >> adding new variables to the p3_main call
+                   n_diag_4d      = n_diag_4d,                                                            &
+                   diag_4d        = diag_4d(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat, 1:n_diag_4d) &
+!! << JM_20260331
                    )
     END DO
 
@@ -321,6 +364,26 @@ CONTAINS
       p3_vars_3d(i_icecat)%deff_i = diag_effi_4d(:,:,:,i_icecat) * 2.
       p3_vars_3d(i_icecat)%rho_i = diag_rhoi_4d(:,:,:,i_icecat)
       p3_vars_3d(i_icecat)%vm_i = diag_vmi_4d(:,:,:,i_icecat)
+    END DO
+    
+    DO i_icecat = 1, n_icecat
+!! JM_20260331 >> store computed ice-phase process rates (need to be adjusted here when adding more diagnostics)
+      p3_ice_diag_3d(i_icecat)%d_qidep_ = diag_4d(:,:,:,i_icecat,1)
+      p3_ice_diag_3d(i_icecat)%d_qisub_ = diag_4d(:,:,:,i_icecat,2)
+      p3_ice_diag_3d(i_icecat)%d_qinuc_ = diag_4d(:,:,:,i_icecat,3)
+      p3_ice_diag_3d(i_icecat)%d_qchetc_ = diag_4d(:,:,:,i_icecat,4)
+      p3_ice_diag_3d(i_icecat)%d_qcheti_ = diag_4d(:,:,:,i_icecat,5)
+      p3_ice_diag_3d(i_icecat)%d_qrhetc_ = diag_4d(:,:,:,i_icecat,6)
+      p3_ice_diag_3d(i_icecat)%d_qrheti_ = diag_4d(:,:,:,i_icecat,7)
+      p3_ice_diag_3d(i_icecat)%d_qimlt_ = diag_4d(:,:,:,i_icecat,8)
+      p3_ice_diag_3d(i_icecat)%d_qccol_ = diag_4d(:,:,:,i_icecat,9)
+      p3_ice_diag_3d(i_icecat)%d_qrcol_ = diag_4d(:,:,:,i_icecat,10)
+      p3_ice_diag_3d(i_icecat)%d_qwgrth_ = diag_4d(:,:,:,i_icecat,11)
+      p3_ice_diag_3d(i_icecat)%d_qcshd_ = diag_4d(:,:,:,i_icecat,12)
+      p3_ice_diag_3d(i_icecat)%d_qcmul_ = diag_4d(:,:,:,i_icecat,13)
+      p3_ice_diag_3d(i_icecat)%d_qrmul_ = diag_4d(:,:,:,i_icecat,14)
+      p3_ice_diag_3d(i_icecat)%d_nimul_ = diag_4d(:,:,:,i_icecat,15)
+!! << JM_20260331
     END DO
 
     ! update warm-cloud tracers
@@ -414,6 +477,9 @@ CONTAINS
 
     ! clean up
     DEALLOCATE(diag_2d, diag_3d)
+!! JM_20260331 >> cleanup for ice-phase diagnostics
+    DEALLOCATE(diag_4d)
+!! << JM_20260331
 
     CALL dyn_vars_3d%nullify()
     CALL mp_vars_3d%nullify()
@@ -421,6 +487,9 @@ CONTAINS
     DO i_icecat = 1, n_icecat
       CALL p3_vars_3d(i_icecat)%nullify()
       CALL p3_tracer_3d(i_icecat)%nullify()
+!! JM_20260331 >> nullifying ice-phase diagnostics
+      CALL p3_ice_diag_3d(i_icecat)%nullify()
+!! << JM_20260331
     END DO
 
     !IF (rank_world == 0) WRITE (0,*) 'end of p3_main_wrapper'

@@ -10,6 +10,9 @@ MODULE p3plugin_types
   PUBLIC :: t_p3_vars_handle, t_p3_vars_3dptr
   PUBLIC :: t_icon_tracer_handle, t_icon_tracer_3dptr
   PUBLIC :: t_p3_tracer_handle, t_p3_tracer_3dptr
+!! JM_:20260331 >> defining new comin handle and pointer for ice-phase diagnostics
+  PUBLIC :: t_p3_ice_diag_handle, t_p3_ice_diag_3dptr
+!! << JM_20260331
 
   INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
 
@@ -87,6 +90,28 @@ MODULE p3plugin_types
     PROCEDURE :: nullify => nullify_p3_tracer_3dptr
   END type t_p3_tracer_3dptr
 
+!! JM_20260331 >> defining new comin handle and pointer for ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
+  TYPE :: t_p3_ice_diag_handle
+    TYPE(t_comin_var_handle)            :: d_qidep_, d_qisub_ ! deposition/sublimation
+    TYPE(t_comin_var_handle)            :: d_qinuc_, d_qchetc_, d_qcheti_, d_qrhetc_, d_qrheti_ ! freezing
+    TYPE(t_comin_var_handle)            :: d_qimlt_ ! melting
+    TYPE(t_comin_var_handle)            :: d_qccol_, d_qrcol_ ! collection (mixed)
+    TYPE(t_comin_var_handle)            :: d_qwgrth_ ! wet growth
+    TYPE(t_comin_var_handle)            :: d_qcshd_ ! shedding
+    TYPE(t_comin_var_handle)            :: d_qcmul_, d_qrmul_, d_nimul_ ! rime-splintering
+  END type t_p3_ice_diag_handle
+
+  TYPE :: t_p3_ice_diag_3dptr
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qidep_, d_qisub_ ! deposition/sublimation 
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qinuc_, d_qchetc_, d_qcheti_, d_qrhetc_, d_qrheti_ ! freezing
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qimlt_ ! melting
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qccol_, d_qrcol_ ! collection (mixed)
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qwgrth_ ! wet growth
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qcshd_ ! shedding
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qcmul_, d_qrmul_, d_nimul_ ! rime-splintering 
+  CONTAINS
+    PROCEDURE :: nullify => nullify_p3_ice_diag_3dptr
+  END type t_p3_ice_diag_3dptr
 
 CONTAINS
 
@@ -128,4 +153,15 @@ CONTAINS
     NULLIFY(this%qitot, this%qnitot, this%qirim, this%birim, this%qzitot, this%qiliq)
   END SUBROUTINE nullify_p3_tracer_3dptr
 
+!! JM_20260331 >> cleanup 4D for ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
+  SUBROUTINE nullify_p3_ice_diag_3dptr(this)
+    CLASS(t_p3_ice_diag_3dptr), INTENT(inout) :: this
+    NULLIFY(this%d_qidep_, this%d_qisub_)
+    NULLIFY(this%d_qinuc_, this%d_qchetc_, this%d_qcheti_, this%d_qrhetc_, this%d_qrheti_)
+    NULLIFY(this%d_qimlt_)
+    NULLIFY(this%d_qccol_, this%d_qrcol_)
+    NULLIFY(this%d_qwgrth_)
+    NULLIFY(this%d_qcshd_)
+    NULLIFY(this%d_qcmul_, this%d_qrmul_, this%d_nimul_)
+  END SUBROUTINE nullify_p3_ice_diag_3dptr
 END MODULE p3plugin_types

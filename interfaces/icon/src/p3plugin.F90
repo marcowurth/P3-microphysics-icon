@@ -24,6 +24,9 @@ MODULE p3plugin
   USE p3plugin_utils,          ONLY : create_var, create_tracer
   USE p3plugin_tracer_init,    ONLY : init_p3_and_tracer
   USE p3plugin_main_routines,  ONLY : p3_main_wrapper, set_reff_before_rad
+!! JM_20260331 >> using new comin handle for ice-phase diagnostics
+  USE p3plugin_global_vars,    ONLY : p3_ice_diag
+!! << JM_20260331
 
   IMPLICIT NONE
   PRIVATE
@@ -103,6 +106,9 @@ CONTAINS
     ALLOCATE(p3_vars(n_icecat))
     ALLOCATE(p3_tracer(n_icecat))
     ALLOCATE(p3_tracer_ddt_turb(n_icecat))
+!! JM_20260331 >> allocate memory for new comin handle for ice-phase diagnostics
+    ALLOCATE(p3_ice_diag(n_icecat))
+!! << JM_20260331
 
 
     ! create new vars in ICON
@@ -150,6 +156,38 @@ CONTAINS
       CALL create_var(icecat_name, 'kg m-3', '3d', 'dp')
       WRITE(icecat_name, '(a,i0)') 'vm_i', i_icecat
       CALL create_var(icecat_name, 'm s-1', '3d', 'dp')
+!! JM_20260331 >> create new comin variabe (need to be adjusted here when adding more diagnostics)
+      WRITE(icecat_name, '(a,i0)') 'd_qidep_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qisub_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qinuc_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qchetc_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qcheti_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qrhetc_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qrheti_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qimlt_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qccol_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qrcol_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qwgrth_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qcshd_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qcmul_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_qrmul_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
+      WRITE(icecat_name, '(a,i0)') 'd_nimul_', i_icecat
+      CALL create_var(icecat_name, '# kg-1', '3d', 'dp')
+!! << JM_20260331
     END DO
 
 
@@ -257,24 +295,24 @@ CONTAINS
     !! JM_20260323 >> adding new diagnostics
     ! --- warm-rain process rates ---
     ! nucleation
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qcnuc', id),       IOR(FR, FW), mp_vars%d_qcnuc)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncnuc', id),       IOR(FR, FW), mp_vars%d_ncnuc)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcnuc', id), IOR(FR, FW), mp_vars%d_qcnuc)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_ncnuc', id), IOR(FR, FW), mp_vars%d_ncnuc)
     ! condensation
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qccon', id),       IOR(FR, FW), mp_vars%d_qccon)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qrcon', id),       IOR(FR, FW), mp_vars%d_qrcon)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qccon', id), IOR(FR, FW), mp_vars%d_qccon)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qrcon', id), IOR(FR, FW), mp_vars%d_qrcon)
     ! evaporation
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qcevp', id),       IOR(FR, FW), mp_vars%d_qcevp)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qrevp', id),       IOR(FR, FW), mp_vars%d_qrevp)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_nrevp', id),       IOR(FR, FW), mp_vars%d_nrevp)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcevp', id), IOR(FR, FW), mp_vars%d_qcevp)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qrevp', id), IOR(FR, FW), mp_vars%d_qrevp)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_nrevp', id), IOR(FR, FW), mp_vars%d_nrevp)
     ! collection (warm)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qcacc',  id),      IOR(FR, FW), mp_vars%d_qcacc)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncacc',  id),      IOR(FR, FW), mp_vars%d_ncacc)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_qcaut', id),       IOR(FR, FW), mp_vars%d_qcaut)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncautc', id),      IOR(FR, FW), mp_vars%d_ncautc)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncautr', id),      IOR(FR, FW), mp_vars%d_ncautr)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcacc',  id), IOR(FR, FW), mp_vars%d_qcacc)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_ncacc',  id), IOR(FR, FW), mp_vars%d_ncacc)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcaut', id), IOR(FR, FW), mp_vars%d_qcaut)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_ncautc', id), IOR(FR, FW), mp_vars%d_ncautc)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_ncautr', id), IOR(FR, FW), mp_vars%d_ncautr)
     ! self-collection
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_ncslf', id),       IOR(FR, FW), mp_vars%d_ncslf)
-    CALL comin_var_get([ep_mp, ep_out],                   t_comin_var_descriptor('d_nrslf', id),       IOR(FR, FW), mp_vars%d_nrslf)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_ncslf', id), IOR(FR, FW), mp_vars%d_ncslf)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_nrslf', id), IOR(FR, FW), mp_vars%d_nrslf)
 !! << JM_20260323
 
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prec_gsp_rate', id), IOR(FR, FW), mp_vars%prec_gsp_rate)
@@ -298,6 +336,38 @@ CONTAINS
       CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_vars(i_icecat)%rho_i)
       WRITE(icecat_name, '(a,i0)') 'vm_i', i_icecat
       CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_vars(i_icecat)%vm_i)
+!! JM_20260331 >> registering new ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
+      WRITE(icecat_name, '(a,i0)') 'd_qidep_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qidep_)
+      WRITE(icecat_name, '(a,i0)') 'd_qisub_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qisub_)
+      WRITE(icecat_name, '(a,i0)') 'd_qinuc_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qinuc_)
+      WRITE(icecat_name, '(a,i0)') 'd_qchetc_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qchetc_)
+      WRITE(icecat_name, '(a,i0)') 'd_qcheti_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qcheti_)
+      WRITE(icecat_name, '(a,i0)') 'd_qrhetc_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qrhetc_)
+      WRITE(icecat_name, '(a,i0)') 'd_qrheti_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qrheti_)
+      WRITE(icecat_name, '(a,i0)') 'd_qimlt_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qimlt_)
+      WRITE(icecat_name, '(a,i0)') 'd_qccol_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qccol_)
+      WRITE(icecat_name, '(a,i0)') 'd_qrcol_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qrcol_)
+      WRITE(icecat_name, '(a,i0)') 'd_qwgrth_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qwgrth_)
+      WRITE(icecat_name, '(a,i0)') 'd_qcshd_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qcshd_)
+      WRITE(icecat_name, '(a,i0)') 'd_qcmul_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qcmul_)
+      WRITE(icecat_name, '(a,i0)') 'd_qrmul_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qrmul_)
+      WRITE(icecat_name, '(a,i0)') 'd_nimul_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_nimul_)
+!! << JM_20260331
 
       WRITE(icecat_name, '(a,i0)') 'qitot_', i_icecat
       CALL comin_var_get([ep_init, ep_turb, ep_mp, ep_nudg, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_tracer(i_icecat)%qitot)

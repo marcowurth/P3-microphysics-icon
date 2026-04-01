@@ -1031,7 +1031,8 @@ END subroutine p3_init
                       log_3momentIce = log_3momIce,                                                    &
                       log_LiquidFrac = log_liqFrac,                                                    &
                       diag_dhmax     = diag_dhmax,                                                     &
-                      freq3Ddiag_in  = freq3Ddiag)
+                      freq3Ddiag_in  = freq3Ddiag,                                                     &
+                      n_diag_4d = 0)
 
      !surface precipitation output:
       dum1 = 1000.*dt     ! to convert rates from mm/s to mm/time step
@@ -1565,7 +1566,7 @@ END subroutine p3_init
                   diag_vis3      = diag_vis3,                                                  &
                   diag_dhmax     = diag_dhmax,                                                 &
                   supi_nuc_in    = supdepthr,                                                  &
-                  freq3Ddiag_in  = freq3Ddiag_gem)
+                  freq3Ddiag_in  = freq3Ddiag_gem, n_diag_4d=0)
 
       if (global_status /= STATUS_OK) return
 
@@ -1980,7 +1981,7 @@ END subroutine p3_init
                     log_3momentIce,log_LiquidFrac,nccnst_in,prt_drzl,prt_rain,prt_crys,   &
                     prt_snow,prt_grpl,prt_pell,prt_hail,prt_sndp,prt_wsnow,qi_type,       &
                     diag_vis,diag_vis1,diag_vis2,diag_vis3,diag_dhmax,supi_nuc_in,        &
-                    freq3Ddiag_in,timer,timer_description)
+                    freq3Ddiag_in,timer,timer_description,n_diag_4d,diag_4d)
 
 !----------------------------------------------------------------------------------------!
 !                                                                                        !
@@ -2005,6 +2006,9 @@ END subroutine p3_init
  integer, intent(in)                                  :: nCat       ! number of ice-phase categories
  integer, intent(in)                                  :: n_diag_2d  ! number of 2D diagnostic fields
  integer, intent(in)                                  :: n_diag_3d  ! number of 3D diagnostic fields
+!! JM_20260331 >> adding 4D diag for output process rates 
+ integer, intent(in)                                  :: n_diag_4d  ! number of 4D diagnostic fields
+!! << JM_20260331
 
  real, intent(inout), dimension(its:ite,kts:kte)      :: qc         ! cloud, mass mixing ratio         kg kg-1
  real, intent(inout), dimension(its:ite,kts:kte)      :: nc         ! cloud, number mixing ratio       #  kg-1
@@ -2045,7 +2049,9 @@ END subroutine p3_init
  real, intent(out),   dimension(its:ite,kts:kte), optional :: diag_vis3  ! visibility through snow     m
  real, intent(out),   dimension(its:ite,n_diag_2d)         :: diag_2d    ! user-defined 2D diagnostic fields
  real, intent(out),   dimension(its:ite,kts:kte,n_diag_3d) :: diag_3d    ! user-defined 3D diagnostic fields
-
+!! JM_20260331 >> adding 4D diag for output process rates 
+ real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_4d), optional :: diag_4d ! user-defined 4D diagnostic fields
+!! << JM_20260331
  integer, intent(in)                                  :: it              ! time step counter (starts at 1 for first step)
 
  logical, intent(in)                                  :: log_predictNc  ! .T. for two-moment (.F. for one-moment) cloud
@@ -2476,6 +2482,9 @@ call cpu_time(timer_start(1))
  if (present(diag_dhmax)) diag_dhmax = 0.
  diag_2d    = 0.
  diag_3d    = 0.
+ !! JM_20260331 >> adding initialization
+ if (present(diag_4d)) diag_4d = 0.
+ !! << JM_20260331
  rhorime_c  = 400.
 !rhorime_r  = 400.
  f1pr22     = -99.  !to avoid uninialized variable (in case of accidental use)
@@ -4217,6 +4226,26 @@ call cpu_time(timer_start(3))
        diag_3d(i,k,14) = diag_3d(i,k,14) + ncautr
        diag_3d(i,k,15) = diag_3d(i,k,15) + ncslf
        diag_3d(i,k,16) = diag_3d(i,k,16) + nrslf
+       
+       if (present(diag_4d)) then
+          DO iice = 1,nCat
+             diag_4d(i,k,iice,1) = diag_4d(i,k,iice,1) + qidep(iice)
+             diag_4d(i,k,iice,2) = diag_4d(i,k,iice,2) + qisub(iice)
+             diag_4d(i,k,iice,3) = diag_4d(i,k,iice,3) + qinuc(iice)
+             diag_4d(i,k,iice,4) = diag_4d(i,k,iice,4) + qchetc(iice)
+             diag_4d(i,k,iice,5) = diag_4d(i,k,iice,5) + qcheti(iice)
+             diag_4d(i,k,iice,6) = diag_4d(i,k,iice,6) + qrhetc(iice)
+             diag_4d(i,k,iice,7) = diag_4d(i,k,iice,7) + qrheti(iice)
+             diag_4d(i,k,iice,8) = diag_4d(i,k,iice,8) + qimlt(iice)
+             diag_4d(i,k,iice,9) = diag_4d(i,k,iice,9) + qccol(iice)
+             diag_4d(i,k,iice,10) = diag_4d(i,k,iice,10) + qrcol(iice)
+             diag_4d(i,k,iice,11) = diag_4d(i,k,iice,11) + qwgrth(iice)
+             diag_4d(i,k,iice,12) = diag_4d(i,k,iice,12) + qcshd(iice)
+             diag_4d(i,k,iice,13) = diag_4d(i,k,iice,13) + qcmul(iice)
+             diag_4d(i,k,iice,14) = diag_4d(i,k,iice,14) + qrmul(iice)
+             diag_4d(i,k,iice,15) = diag_4d(i,k,iice,15) + nimul(iice)
+          END DO
+       endif
 !! << JM_20260330
 
 !======================================================================================!
