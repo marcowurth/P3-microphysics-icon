@@ -5,9 +5,18 @@ MODULE p3plugin_global_vars
   USE p3plugin_types,          ONLY : t_dyn_vars_handle, t_mp_vars_handle, t_p3_vars_handle,   &
     &                                 t_icon_tracer_handle, t_p3_tracer_handle
 
-!! JM_20260331 >> adding new comin handle type
+!! JM_20260331 >> adding new comin handle type for ice-phase diagnostics
   USE p3plugin_types,          ONLY : t_p3_ice_diag_handle
 !! << JM_20260331
+!! JM_20260402 >> adding new comin handle type for ice-phase 3moment diagnostics
+  USE p3plugin_types,          ONLY : t_p3_ice_3mom_diag_handle
+!! << JM_20260402
+!! JM_20260401 >> adding new comin handle type for ice-ice collisions diagnostics
+  USE p3plugin_types,          ONLY : t_p3_ice_coll_handle
+!! << JM_20260401
+!! JM_20260402 >> adding new comin handle type for ice-liquid diagnostics
+  USE p3plugin_types,          ONLY : t_p3_ice_liqfrac_handle
+!! << JM_20260402
 
   IMPLICIT NONE
   PRIVATE
@@ -25,6 +34,15 @@ MODULE p3plugin_global_vars
 !! JM_20260331 >> defining new comin handle for ice-phase diagnostics
   PUBLIC :: p3_ice_diag
 !! << JM_20260331
+!! JM_20260402 >> defining new comin handle for ice-phase 3moment diagnostics
+  PUBLIC :: p3_ice_3mom_diag
+!! << JM_20260402
+!! JM_20260401 >> defining new comin handle for ice-ice collisions diagnostics
+  PUBLIC :: p3_ice_coll
+!! << JM_20260401
+!! JM_20260402 >> defining new comin handle for ice-liquid diagnostics
+  PUBLIC :: p3_ice_liqfrac
+!! << JM_20260402
 
   INTEGER        :: comm_world, comm_insidenode, rank_world, rank_insidenode
   INTEGER        :: numprocs_insidenode, max_patch_size
@@ -48,5 +66,14 @@ MODULE p3plugin_global_vars
 !! JM_20260331 >> defining new comin handle for ice-phase diagnostics
   TYPE(t_p3_ice_diag_handle), ALLOCATABLE :: p3_ice_diag(:)
 !! << JM_20260331
+!! JM_20260402 >> defining new comin handle for ice-phase 3moment diagnostics
+  TYPE(t_p3_ice_3mom_diag_handle), ALLOCATABLE :: p3_ice_3mom_diag(:)
+!! << JM_20260402
+!! JM_20260402 >> defining new comin handle for ice-liquid diagnostics
+  TYPE(t_p3_ice_liqfrac_handle), ALLOCATABLE :: p3_ice_liqfrac(:)
+!! << JM_20260402
+!! JM_20260401 >> defining new comin handle for ice-ice collisions diagnostics
+  TYPE(t_p3_ice_coll_handle), ALLOCATABLE :: p3_ice_coll(:,:)
+!! << JM_20260401
 
 END MODULE p3plugin_global_vars
