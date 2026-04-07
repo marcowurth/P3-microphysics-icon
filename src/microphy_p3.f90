@@ -1032,7 +1032,10 @@ END subroutine p3_init
                       log_LiquidFrac = log_liqFrac,                                                    &
                       diag_dhmax     = diag_dhmax,                                                     &
                       freq3Ddiag_in  = freq3Ddiag,                                                     &
-                      n_diag_4d = 0, n_diag_4d_3mom = 0, n_diag_4d_liqfrac=0, n_diag_5d=0)
+!! JM_20260407 << adding dummy values here
+                      n_diag_2mom = 0, n_diag_2mom_coll = 0,  n_diag_2mom_liqfrac = 0,                 &
+                      n_diag_3mom = 0)
+!! << JM_20260407
 
      !surface precipitation output:
       dum1 = 1000.*dt     ! to convert rates from mm/s to mm/time step
@@ -1567,7 +1570,10 @@ END subroutine p3_init
                   diag_dhmax     = diag_dhmax,                                                 &
                   supi_nuc_in    = supdepthr,                                                  &
                   freq3Ddiag_in  = freq3Ddiag_gem,                                             &
-                  n_diag_4d=0, n_diag_4d_3mom=0, n_diag_4d_liqfrac=0, n_diag_5d=0)
+!! JM_20260407 << adding dummy values here
+                  n_diag_2mom = 0, n_diag_2mom_coll = 0,  n_diag_2mom_liqfrac = 0,             &
+                  n_diag_3mom = 0)
+!! << JM_20260407
 
       if (global_status /= STATUS_OK) return
 
@@ -1983,8 +1989,10 @@ END subroutine p3_init
                     prt_snow,prt_grpl,prt_pell,prt_hail,prt_sndp,prt_wsnow,qi_type,       &
                     diag_vis,diag_vis1,diag_vis2,diag_vis3,diag_dhmax,supi_nuc_in,        &
                     freq3Ddiag_in,timer,timer_description,                                &
-                    n_diag_4d,diag_4d,n_diag_4d_3mom, diag_4d_3mom,                       &
-                    n_diag_4d_liqfrac,diag_4d_liqfrac,n_diag_5d,diag_5d)
+!! JM_20260407 >> adding arguments for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
+                    n_diag_2mom,n_diag_2mom_coll,n_diag_2mom_liqfrac,n_diag_3mom,      &
+                    ice_diag_2mom,ice_diag_2mom_coll,ice_diag_2mom_liqfrac,ice_diag_3mom)
+!! << JM_20260407
 
 !----------------------------------------------------------------------------------------!
 !                                                                                        !
@@ -2009,18 +2017,12 @@ END subroutine p3_init
  integer, intent(in)                                  :: nCat       ! number of ice-phase categories
  integer, intent(in)                                  :: n_diag_2d  ! number of 2D diagnostic fields
  integer, intent(in)                                  :: n_diag_3d  ! number of 3D diagnostic fields
-!! JM_20260331 >> adding integer of 4d diagnostic fields for ice-phase
- integer, intent(in)                                  :: n_diag_4d  ! number of 4D diagnostic fields
-!! << JM_20260331
-!! JM_20260402 >> adding integer of 4d diagnostic fields for liquid fraction
- integer, intent(in)                                  :: n_diag_4d_liqfrac  ! number of 4D diagnostic fields for liquid fraction
-!! << JM_20260402
-!! JM_20260402 >> adding integer of 4d diagnostic fields for ice-phse 3moment
-   integer, intent(in)                                :: n_diag_4d_3mom  ! number of 4D diagnostic fields for ice-phase 3-moment
-!! << JM_20260402
-!! JM_20260401 >> adding integer of 5d diagnostic fields for ice-ice collisions
- integer, intent(in)                                   :: n_diag_5d  ! number of 5D diagnostic fields
-!! << JM_20260401
+!! JM_20260407 >> adding integer for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
+ integer, intent(in)                                  :: n_diag_2mom         ! number of 4D diagnostic fields
+ integer, intent(in)                                  :: n_diag_2mom_coll    ! number of 5D diagnostic fields
+ integer, intent(in)                                  :: n_diag_2mom_liqfrac ! number of 4D diagnostic fields for liquid fraction
+ integer, intent(in)                                  :: n_diag_3mom         ! number of 4D diagnostic fields for ice-phase 3-moment
+!! << JM_20260407
 
  real, intent(inout), dimension(its:ite,kts:kte)      :: qc         ! cloud, mass mixing ratio         kg kg-1
  real, intent(inout), dimension(its:ite,kts:kte)      :: nc         ! cloud, number mixing ratio       #  kg-1
@@ -2061,18 +2063,12 @@ END subroutine p3_init
  real, intent(out),   dimension(its:ite,kts:kte), optional :: diag_vis3  ! visibility through snow     m
  real, intent(out),   dimension(its:ite,n_diag_2d)         :: diag_2d    ! user-defined 2D diagnostic fields
  real, intent(out),   dimension(its:ite,kts:kte,n_diag_3d) :: diag_3d    ! user-defined 3D diagnostic fields
-!! JM_20260331 >> adding 4D diag for output process rates 
- real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_4d), optional :: diag_4d ! user-defined 4D diagnostic fields for ice-phase diagnostics
-!! << JM_20260331
-!! JM_20260402 >> adding 4D diag for liquid fraction output
- real, intent(out), dimension(its:ite,kts:kte,nCat,n_diag_4d_liqfrac), optional :: diag_4d_liqfrac ! user-defined 4D diagnostic fields for ice-liquid diagnostics
-!! << JM_20260402
-!! JM_20260402 >> adding 4D diag for ice-phase 3-moment output
- real, intent(out), dimension(its:ite,kts:kte,nCat,n_diag_4d_3mom), optional :: diag_4d_3mom ! user-defined 4D diagnostic fields for ice-phase 3-moment diagnostics
-!! << JM_20260402
-!! JM_20260401 >> adding 5D diag for output process rates
- real, intent(out),   dimension(its:ite,kts:kte,nCat,nCat,n_diag_5d), optional :: diag_5d ! user-defined 5D diagnostic fields for ice-ice collision diagnostics
-!! << JM_20260401
+!! JM_20260407 >> adding 4D/5D diag for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
+ real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_2mom), optional           :: ice_diag_2mom         ! user-defined 4D diagnostic fields for ice-phase diagnostics
+ real, intent(out),   dimension(its:ite,kts:kte,nCat,nCat,n_diag_2mom_coll), optional :: ice_diag_2mom_coll    ! user-defined 5D diagnostic fields for ice-ice collision diagnostics
+ real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_2mom_liqfrac), optional   :: ice_diag_2mom_liqfrac ! user-defined 4D diagnostic fields for ice-liquid diagnostics
+ real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_3mom), optional           :: ice_diag_3mom         ! user-defined 4D diagnostic fields for ice-phase 3-moment diagnostics
+!! << JM_20260407
 
  integer, intent(in)                                  :: it              ! time step counter (starts at 1 for first step)
 
@@ -2504,15 +2500,12 @@ call cpu_time(timer_start(1))
  if (present(diag_dhmax)) diag_dhmax = 0.
  diag_2d    = 0.
  diag_3d    = 0.
- !! JM_20260331 >> adding initialization
- if (present(diag_4d)) diag_4d = 0.
- !! << JM_20260331
- !! JM_20260402 >> adding initialization
- if (present(diag_4d_liqfrac)) diag_4d_liqfrac = 0.
- !! << JM_20260402
- !! JM_20260401 >> adding initialization
- if (present(diag_5d)) diag_5d = 0.
- !! << JM_20260401
+ !! JM_20260407 >> adding initialization
+ if (present(ice_diag_2mom)) ice_diag_2mom = 0.
+ if (present(ice_diag_2mom_liqfrac)) ice_diag_2mom_liqfrac = 0.
+ if (present(ice_diag_2mom_coll)) ice_diag_2mom_coll = 0.
+ if (present(ice_diag_3mom)) ice_diag_3mom = 0.
+ !! << JM_20260407
  rhorime_c  = 400.
 !rhorime_r  = 400.
  f1pr22     = -99.  !to avoid uninialized variable (in case of accidental use)
@@ -4250,66 +4243,61 @@ call cpu_time(timer_start(3))
        diag_3d(i,k,10) = diag_3d(i,k,8) + qcacc
        diag_3d(i,k,12) = diag_3d(i,k,9) + qcaut
  !! << JM_20260330
- !! JM_20260331 >> add diagnostic for ice-phase processes 
-       if (present(diag_4d)) then
+ !! JM_20260407 >> add diagnostic for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
+       if (present(ice_diag_2mom)) then
           DO iice = 1,nCat
-             diag_4d(i,k,iice,1) = diag_4d(i,k,iice,1) + qidep(iice)
-             diag_4d(i,k,iice,2) = diag_4d(i,k,iice,2) + qisub(iice)
-             diag_4d(i,k,iice,3) = diag_4d(i,k,iice,3) + qinuc(iice)
-             diag_4d(i,k,iice,4) = diag_4d(i,k,iice,4) + qchetc(iice)
-             diag_4d(i,k,iice,5) = diag_4d(i,k,iice,5) + qcheti(iice)
-             diag_4d(i,k,iice,6) = diag_4d(i,k,iice,6) + qrhetc(iice)
-             diag_4d(i,k,iice,7) = diag_4d(i,k,iice,7) + qrheti(iice)
-             diag_4d(i,k,iice,8) = diag_4d(i,k,iice,8) + qrmlt(iice)
-             diag_4d(i,k,iice,9) = diag_4d(i,k,iice,9) + qccol(iice)
-             diag_4d(i,k,iice,10) = diag_4d(i,k,iice,10) + qrcol(iice)
-             diag_4d(i,k,iice,11) = diag_4d(i,k,iice,11) + qwgrth(iice)
-             diag_4d(i,k,iice,12) = diag_4d(i,k,iice,12) + qcshd(iice)
-             diag_4d(i,k,iice,13) = diag_4d(i,k,iice,13) + qcmul(iice)
-             diag_4d(i,k,iice,14) = diag_4d(i,k,iice,14) + qrmul(iice)
-             diag_4d(i,k,iice,15) = diag_4d(i,k,iice,15) + nimul(iice)
+             ice_diag_2mom(i,k,iice,1)  = ice_diag_2mom(i,k,iice,1)  + qidep(iice)
+             ice_diag_2mom(i,k,iice,2)  = ice_diag_2mom(i,k,iice,2)  + qisub(iice)
+             ice_diag_2mom(i,k,iice,3)  = ice_diag_2mom(i,k,iice,3)  + qinuc(iice)
+             ice_diag_2mom(i,k,iice,4)  = ice_diag_2mom(i,k,iice,4)  + qchetc(iice)
+             ice_diag_2mom(i,k,iice,5)  = ice_diag_2mom(i,k,iice,5)  + qcheti(iice)
+             ice_diag_2mom(i,k,iice,6)  = ice_diag_2mom(i,k,iice,6)  + qrhetc(iice)
+             ice_diag_2mom(i,k,iice,7)  = ice_diag_2mom(i,k,iice,7)  + qrheti(iice)
+             ice_diag_2mom(i,k,iice,8)  = ice_diag_2mom(i,k,iice,8)  + qrmlt(iice)
+             ice_diag_2mom(i,k,iice,9)  = ice_diag_2mom(i,k,iice,9)  + qccol(iice)
+             ice_diag_2mom(i,k,iice,10) = ice_diag_2mom(i,k,iice,10) + qrcol(iice)
+             ice_diag_2mom(i,k,iice,11) = ice_diag_2mom(i,k,iice,11) + qwgrth(iice)
+             ice_diag_2mom(i,k,iice,12) = ice_diag_2mom(i,k,iice,12) + qcshd(iice)
+             ice_diag_2mom(i,k,iice,13) = ice_diag_2mom(i,k,iice,13) + qcmul(iice)
+             ice_diag_2mom(i,k,iice,14) = ice_diag_2mom(i,k,iice,14) + qrmul(iice)
+             ice_diag_2mom(i,k,iice,15) = ice_diag_2mom(i,k,iice,15) + nimul(iice)
           END DO
        endif
-!! << JM_20260331
-!! JM_20260402 >> add diagnostic for ice-liquid diagnostics
-       if (present(diag_4d_liqfrac)) then
-          DO iice = 1,nCat
-               diag_4d_liqfrac(i,k,iice,1) = diag_4d_liqfrac(i,k,iice,1) + qimlt(iice)
-               diag_4d_liqfrac(i,k,iice,2) = diag_4d_liqfrac(i,k,iice,2) + qwgrth1(iice)
-               diag_4d_liqfrac(i,k,iice,3) = diag_4d_liqfrac(i,k,iice,3) + qwgrth1c(iice)
-               diag_4d_liqfrac(i,k,iice,4) = diag_4d_liqfrac(i,k,iice,4) + qwgrth1r(iice)
-               diag_4d_liqfrac(i,k,iice,5) = diag_4d_liqfrac(i,k,iice,5) + qlshd(iice)
-               diag_4d_liqfrac(i,k,iice,6) = diag_4d_liqfrac(i,k,iice,6) + qlcon(iice)
-               diag_4d_liqfrac(i,k,iice,7) = diag_4d_liqfrac(i,k,iice,7) + qlevp(iice)
-               diag_4d_liqfrac(i,k,iice,8) = diag_4d_liqfrac(i,k,iice,8) + qifrz(iice)
-               diag_4d_liqfrac(i,k,iice,9) = diag_4d_liqfrac(i,k,iice,9) + qccoll(iice)
-               diag_4d_liqfrac(i,k,iice,10) = diag_4d_liqfrac(i,k,iice,10) + qrcoll(iice)
-          END DO
-       endif
-!! << JM_20260402
-       if (present(diag_4d_3mom)) then
-          DO iice = 1,nCat
-             diag_4d_3mom(i,k,iice,1) = diag_4d_3mom(i,k,iice,1) + zidep(iice)
-             diag_4d_3mom(i,k,iice,2) = diag_4d_3mom(i,k,iice,2) + zisub(iice)
-             diag_4d_3mom(i,k,iice,3) = diag_4d_3mom(i,k,iice,3) + zimlt(iice)
-             diag_4d_3mom(i,k,iice,4) = diag_4d_3mom(i,k,iice,4) + zislf(iice)
-             diag_4d_3mom(i,k,iice,5) = diag_4d_3mom(i,k,iice,5) + zishd(iice)
-             diag_4d_3mom(i,k,iice,6) = diag_4d_3mom(i,k,iice,6) + zqccol(iice)
-             diag_4d_3mom(i,k,iice,7) = diag_4d_3mom(i,k,iice,7) + zqrcol(iice)
-          END DO
-       endif
-!! << JM_20260402
-!! JM_20260401 >> add diagnostic for ice-ice collisional diagnostics
-       if (present(diag_5d)) then
+       if (present(ice_diag_2mom_coll)) then
           DO iice = 1,nCat
             DO catcoll = 1,nCat
                if (catcoll.ne.iice) then
-                  diag_5d(i,k,iice,catcoll,1) = diag_5d(i,k,iice,catcoll,1) + qicol(iice,catcoll)
+                  ice_diag_2mom_coll(i,k,iice,catcoll,1) = ice_diag_2mom_coll(i,k,iice,catcoll,1) + qicol(iice,catcoll)
                END IF
             END DO
           END DO
        endif
-!! << JM_20260401
+       if (present(ice_diag_2mom_liqfrac)) then
+          DO iice = 1,nCat
+               ice_diag_2mom_liqfrac(i,k,iice,1)  = ice_diag_2mom_liqfrac(i,k,iice,1)  + qimlt(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,2)  = ice_diag_2mom_liqfrac(i,k,iice,2)  + qwgrth1(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,3)  = ice_diag_2mom_liqfrac(i,k,iice,3)  + qwgrth1c(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,4)  = ice_diag_2mom_liqfrac(i,k,iice,4)  + qwgrth1r(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,5)  = ice_diag_2mom_liqfrac(i,k,iice,5)  + qlshd(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,6)  = ice_diag_2mom_liqfrac(i,k,iice,6)  + qlcon(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,7)  = ice_diag_2mom_liqfrac(i,k,iice,7)  + qlevp(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,8)  = ice_diag_2mom_liqfrac(i,k,iice,8)  + qifrz(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,9)  = ice_diag_2mom_liqfrac(i,k,iice,9)  + qccoll(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,10) = ice_diag_2mom_liqfrac(i,k,iice,10) + qrcoll(iice)
+          END DO
+       endif
+       if (present(ice_diag_3mom)) then
+          DO iice = 1,nCat
+             ice_diag_3mom(i,k,iice,1) = ice_diag_3mom(i,k,iice,1) + zidep(iice)
+             ice_diag_3mom(i,k,iice,2) = ice_diag_3mom(i,k,iice,2) + zisub(iice)
+             ice_diag_3mom(i,k,iice,3) = ice_diag_3mom(i,k,iice,3) + zimlt(iice)
+             ice_diag_3mom(i,k,iice,4) = ice_diag_3mom(i,k,iice,4) + zislf(iice)
+             ice_diag_3mom(i,k,iice,5) = ice_diag_3mom(i,k,iice,5) + zishd(iice)
+             ice_diag_3mom(i,k,iice,6) = ice_diag_3mom(i,k,iice,6) + zqccol(iice)
+             ice_diag_3mom(i,k,iice,7) = ice_diag_3mom(i,k,iice,7) + zqrcol(iice)
+          END DO
+       endif
+!! << JM_20260407
 
 !======================================================================================!
 

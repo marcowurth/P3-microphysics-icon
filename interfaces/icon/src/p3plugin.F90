@@ -20,22 +20,14 @@ MODULE p3plugin
     &                                 n_icecat, itracer_ini, l3mom_ice, lliqfrac, autoAccr_param_in,      &
     &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,         &
     &                                 dyn_vars, mp_vars, p3_vars,                                         &
-    &                                 icon_tracer, icon_tracer_ddt_turb, p3_tracer, p3_tracer_ddt_turb
+    &                                 icon_tracer, icon_tracer_ddt_turb, p3_tracer, p3_tracer_ddt_turb,   &
+!! JM_20260407 >> using new comin handle for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
+    &                                 p3_ice_diag_2mom, p3_ice_diag_2mom_coll, p3_ice_diag_2mom_liqfrac,  &
+    &                                 p3_ice_diag_3mom
+!! << JM_20260407
   USE p3plugin_utils,          ONLY : create_var, create_tracer
   USE p3plugin_tracer_init,    ONLY : init_p3_and_tracer
   USE p3plugin_main_routines,  ONLY : p3_main_wrapper, set_reff_before_rad
-!! JM_20260331 >> using new comin handle for ice-phase diagnostics
-  USE p3plugin_global_vars,    ONLY : p3_ice_diag
-!! << JM_20260331
-!! JM_20260402 >> using new comin handle for ice-phase 3moment diagnostics
-  USE p3plugin_global_vars,    ONLY : p3_ice_3mom_diag
-!! << JM_20260402
-!! JM_20260401 >> using new comin handle for ice-ice collisions diagnostics
-  USE p3plugin_global_vars,    ONLY : p3_ice_coll
-!! << JM_20260401
-!! JM_20260402 >> using new comin handle for ice-liquid diagnostics
-  USE p3plugin_global_vars,    ONLY : p3_ice_liqfrac
-!! << JM_20260402
 
   IMPLICIT NONE
   PRIVATE
@@ -57,9 +49,9 @@ CONTAINS
     CHARACTER(99)                    :: icon_namelist_name
     LOGICAL                          :: ltracer_turb
     INTEGER, ALLOCATABLE             :: idxmap(:), idxvec_local(:), idxvec_global_padded(:)
-!! JM_20260401 >> defining new integer for ice-phase diagnostics
+!! JM_20260404 >> defining dummy integer for ice-ice collision diagnostics
     INTEGER                          :: catcoll
-!! << JM_20260401
+!! << JM_20260407
 
     comm_world = comin_parallel_get_host_mpi_comm()
     rank_world = comin_parallel_get_host_mpi_rank()
@@ -118,18 +110,12 @@ CONTAINS
     ALLOCATE(p3_vars(n_icecat))
     ALLOCATE(p3_tracer(n_icecat))
     ALLOCATE(p3_tracer_ddt_turb(n_icecat))
-!! JM_20260331 >> allocate memory for new comin handle for ice-phase diagnostics
-    ALLOCATE(p3_ice_diag(n_icecat))
-!! << JM_20260331
-!! JM_20260402 >> allocate memory for new comin handle for ice-liquid diagnostics
-    ALLOCATE(p3_ice_liqfrac(n_icecat))
-!! << JM_20260402
-!! JM_20260402 >> allocate memory for new comin handle for ice-phase 3moment diagnostics
-    ALLOCATE(p3_ice_3mom_diag(n_icecat))
-!! << JM_20260402
-!! JM_20260401 >> allocate memory for new comin handle for ice-ice collisions diagnostics
-    ALLOCATE(p3_ice_coll(n_icecat, n_icecat))
-!! << JM_20260401
+!! JM_20260407 >> allocate memory for new comin handle 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
+    ALLOCATE(p3_ice_diag_2mom(n_icecat))
+    ALLOCATE(p3_ice_diag_2mom_coll(n_icecat, n_icecat))
+    ALLOCATE(p3_ice_diag_2mom_liqfrac(n_icecat))
+    ALLOCATE(p3_ice_diag_3mom(n_icecat))
+!! << JM_20260407
 
 
     ! create new vars in ICON
@@ -164,7 +150,7 @@ CONTAINS
       CALL create_var(icecat_name, 'kg m-3', '3d', 'dp')
       WRITE(icecat_name, '(a,i0)') 'vm_i', i_icecat
       CALL create_var(icecat_name, 'm s-1', '3d', 'dp')
-!! JM_20260331 >> create new comin variabes for ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
+!! JM_20260407 >> create new comin variabes for 2moment ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
       WRITE(icecat_name, '(a,i0)') 'd_qidep_', i_icecat
       CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
       WRITE(icecat_name, '(a,i0)') 'd_qisub_', i_icecat
@@ -195,9 +181,9 @@ CONTAINS
       CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
       WRITE(icecat_name, '(a,i0)') 'd_nimul_', i_icecat
       CALL create_var(icecat_name, '# kg-1', '3d', 'dp')
-!! << JM_20260331
+!! << JM_20260407
     END DO
-!! JM_20260401 >> create new comin variabe for ice-ice collisions diagnostics
+!! JM_20260407 >> create new comin variabe for 2moment ice-ice collisions diagnostics
     DO i_icecat = 1, n_icecat
       DO catcoll = 1, n_icecat
          if (i_icecat /= catcoll) then
@@ -206,7 +192,7 @@ CONTAINS
          END IF
       END DO
     END DO
-!! << JM_20260401
+!! << JM_20260407
 
 
     ! create new tracers in ICON
@@ -242,7 +228,7 @@ CONTAINS
         WRITE(icecat_name, '(a,i0)') 'qzitot_', i_icecat
         WRITE(unit_name, '(a)')      'm6 kg-1'
         CALL create_tracer(icecat_name, unit_name, ltracer_turb)
-!! JM_20260402 >> creating new comin variables for ice-phase 3moment diagnostics
+!! JM_20260407 >> creating new comin variables for 3moment ice-phase diagnostics
         WRITE(icecat_name, '(a,i0)') 'd_zidep_', i_icecat
         CALL create_var(icecat_name, 'm6 kg-1', '3d', 'dp')
         WRITE(icecat_name, '(a,i0)') 'd_zisub_', i_icecat
@@ -257,7 +243,7 @@ CONTAINS
         CALL create_var(icecat_name, 'm6 kg-1', '3d', 'dp')
         WRITE(icecat_name, '(a,i0)') 'd_zqrcol_', i_icecat
         CALL create_var(icecat_name, 'm6 kg-1', '3d', 'dp')
-!! << JM_20260402
+!! << JM_20260407
       END DO
     ENDIF
     IF (lliqfrac) THEN
@@ -265,7 +251,7 @@ CONTAINS
         WRITE(icecat_name, '(a,i0)') 'qiliq_', i_icecat
         WRITE(unit_name, '(a)')      'kg kg-1'
         CALL create_tracer(icecat_name, unit_name, ltracer_turb)
-!! JM_20260402 >> creating new comin variables for ice-liquid diagnostics
+!! JM_20260407 >> creating new comin variables for 2moment ice-liquid diagnostics
         WRITE(icecat_name, '(a,i0)') 'd_qimlt_', i_icecat
         CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp') 
         WRITE(icecat_name, '(a,i0)') 'd_qwgrth1_', i_icecat
@@ -286,7 +272,7 @@ CONTAINS
         CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
         WRITE(icecat_name, '(a,i0)') 'd_qrcoll_', i_icecat
         CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp')
-!! << JM_20260402
+!! << JM_20260407
       END DO
     ENDIF
 
@@ -317,9 +303,9 @@ CONTAINS
     INTEGER       :: id = 1
     INTEGER       :: i_icecat
     CHARACTER(20) :: icecat_name
-!! JM_20260401 >> defining new integer for ice-phase diagnostics
-    INTEGER                          :: catcoll
-!! << JM_20260401
+!! JM_20260407 >> defining new integer for ice-phase diagnostics
+    INTEGER       :: catcoll
+!! << JM_20260407
 
     CALL comin_var_get([ep_init], t_comin_var_descriptor('z_mc', id), FR, dyn_vars%hfl)
     CALL comin_var_get([ep_mp], t_comin_var_descriptor('ddqz_z_full', id), FR, dyn_vars%dz)
@@ -351,7 +337,7 @@ CONTAINS
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('dhmax', id), IOR(FR, FW), mp_vars%dhmax)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('dhmax_ground', id), IOR(FR, FW), mp_vars%dhmax_ground)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('ze_p3', id), IOR(FR, FW), mp_vars%ze_p3)
-    !! JM_20260323 >> adding warm-rain diagnostics
+!! JM_20260323 >> adding warm-rain diagnostics
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcnuc', id), IOR(FR, FW), mp_vars%d_qcnuc)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qccon', id), IOR(FR, FW), mp_vars%d_qccon)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qrcon', id), IOR(FR, FW), mp_vars%d_qrcon)
@@ -382,46 +368,46 @@ CONTAINS
       CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_vars(i_icecat)%rho_i)
       WRITE(icecat_name, '(a,i0)') 'vm_i', i_icecat
       CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_vars(i_icecat)%vm_i)
-!! JM_20260331 >> registering new ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
+!! JM_20260331 >> registering new 2moment ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
       WRITE(icecat_name, '(a,i0)') 'd_qidep_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qidep_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qidep_)
       WRITE(icecat_name, '(a,i0)') 'd_qisub_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qisub_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qisub_)
       WRITE(icecat_name, '(a,i0)') 'd_qinuc_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qinuc_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qinuc_)
       WRITE(icecat_name, '(a,i0)') 'd_qchetc_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qchetc_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qchetc_)
       WRITE(icecat_name, '(a,i0)') 'd_qcheti_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qcheti_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qcheti_)
       WRITE(icecat_name, '(a,i0)') 'd_qrhetc_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qrhetc_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qrhetc_)
       WRITE(icecat_name, '(a,i0)') 'd_qrheti_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qrheti_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qrheti_)
       WRITE(icecat_name, '(a,i0)') 'd_qrmlt_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qrmlt_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qrmlt_)
       WRITE(icecat_name, '(a,i0)') 'd_qccol_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qccol_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qccol_)
       WRITE(icecat_name, '(a,i0)') 'd_qrcol_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qrcol_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qrcol_)
       WRITE(icecat_name, '(a,i0)') 'd_qwgrth_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qwgrth_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qwgrth_)
       WRITE(icecat_name, '(a,i0)') 'd_qcshd_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qcshd_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qcshd_)
       WRITE(icecat_name, '(a,i0)') 'd_qcmul_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qcmul_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qcmul_)
       WRITE(icecat_name, '(a,i0)') 'd_qrmul_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_qrmul_)
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qrmul_)
       WRITE(icecat_name, '(a,i0)') 'd_nimul_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag(i_icecat)%d_nimul_)
-!! << JM_20260331
-!! JM_20260401 >> registering new ice-ice collision diagnostics
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_nimul_)
+!! << JM_20260407
+!! JM_20260407 >> registering new 2moment ice-ice collision diagnostics
       DO catcoll = 1, n_icecat
          if (i_icecat /= catcoll) then
            WRITE(icecat_name, '(a,i0,i0)') 'd_qicol_', i_icecat, catcoll
-           CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_coll(i_icecat, catcoll)%d_qicol_)
+           CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_coll(i_icecat, catcoll)%d_qicol_)
          END IF
       END DO
-!! << JM_20260401
+!! << JM_20260407
 
       WRITE(icecat_name, '(a,i0)') 'qitot_', i_icecat
       CALL comin_var_get([ep_init, ep_turb, ep_mp, ep_nudg, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_tracer(i_icecat)%qitot)
@@ -439,49 +425,49 @@ CONTAINS
         WRITE(icecat_name, '(a,i0)') 'qzitot_', i_icecat
         CALL comin_var_get([ep_init, ep_turb, ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_tracer(i_icecat)%qzitot)
         !CALL comin_var_get([ep_turb, ep_mp], t_comin_var_descriptor('ddt_'//TRIM(icecat_name)//'_turb', id), FR, p3_tracer_ddt_turb(i_icecat)%qzitot)
-!! JM_20260402 >> registering new diagnostic for ice-liquid interactions
-        WRITE(icecat_name, '(a,i0)') 'd_qimlt_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qimlt_)
-        WRITE(icecat_name, '(a,i0)') 'd_qwgrth1_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qwgrth1_)
-        WRITE(icecat_name, '(a,i0)') 'd_qwgrth1c_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qwgrth1c_)
-        WRITE(icecat_name, '(a,i0)') 'd_qwgrth1r_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qwgrth1r_)
-        WRITE(icecat_name, '(a,i0)') 'd_qlshd_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qlshd_)
-        WRITE(icecat_name, '(a,i0)') 'd_qlcon_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qlcon_)
-        WRITE(icecat_name, '(a,i0)') 'd_qlevp_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qlevp_)
-        WRITE(icecat_name, '(a,i0)') 'd_qifrz_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qifrz_)
-        WRITE(icecat_name, '(a,i0)') 'd_qccoll_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qccoll_)
-        WRITE(icecat_name, '(a,i0)') 'd_qrcoll_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_liqfrac(i_icecat)%d_qrcoll_)
-!! << JM_20260402
+!! JM_20260407 >> registering new 3moment ice-phase diagnostics
+        WRITE(icecat_name, '(a,i0)') 'd_zidep_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_3mom(i_icecat)%d_zidep_)
+        WRITE(icecat_name, '(a,i0)') 'd_zisub_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_3mom(i_icecat)%d_zisub_)
+        WRITE(icecat_name,  '(a,i0)') 'd_zimlt_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_3mom(i_icecat)%d_zimlt_)
+        WRITE(icecat_name, '(a,i0)') 'd_zislf_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_3mom(i_icecat)%d_zislf_)
+        WRITE(icecat_name, '(a,i0)') 'd_zishd_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_3mom(i_icecat)%d_zishd_)
+        WRITE(icecat_name, '(a,i0)') 'd_zqccol_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_3mom(i_icecat)%d_zqccol_)
+        WRITE(icecat_name, '(a,i0)') 'd_zqrcol_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_3mom(i_icecat)%d_zqrcol_)
+!! << JM_20260407
       ENDIF
       IF (lliqfrac) THEN
         WRITE(icecat_name, '(a,i0)') 'qiliq_', i_icecat
         CALL comin_var_get([ep_init, ep_turb, ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_tracer(i_icecat)%qiliq)
         !CALL comin_var_get([ep_turb, ep_mp], t_comin_var_descriptor('ddt_'//TRIM(icecat_name)//'_turb', id), FR, p3_tracer_ddt_turb(i_icecat)%qiliq)
-!! JM_20260402 >> registering new tracer for ice-liquid interactions
-        WRITE(icecat_name, '(a,i0)') 'd_zidep_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_3mom_diag(i_icecat)%d_zidep_)
-        WRITE(icecat_name, '(a,i0)') 'd_zisub_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_3mom_diag(i_icecat)%d_zisub_)
-        WRITE(icecat_name,  '(a,i0)') 'd_zimlt_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_3mom_diag(i_icecat)%d_zimlt_)
-        WRITE(icecat_name, '(a,i0)') 'd_zislf_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_3mom_diag(i_icecat)%d_zislf_)
-        WRITE(icecat_name, '(a,i0)') 'd_zishd_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_3mom_diag(i_icecat)%d_zishd_)
-        WRITE(icecat_name, '(a,i0)') 'd_zqccol_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_3mom_diag(i_icecat)%d_zqccol_)
-        WRITE(icecat_name, '(a,i0)') 'd_zqrcol_', i_icecat
-        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_3mom_diag(i_icecat)%d_zqrcol_)
-!! << JM_20260402
+!! JM_20260407 >> registering new 2moment ice-liquid diagnostics
+        WRITE(icecat_name, '(a,i0)') 'd_qimlt_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qimlt_)
+        WRITE(icecat_name, '(a,i0)') 'd_qwgrth1_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qwgrth1_)
+        WRITE(icecat_name, '(a,i0)') 'd_qwgrth1c_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qwgrth1c_)
+        WRITE(icecat_name, '(a,i0)') 'd_qwgrth1r_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qwgrth1r_)
+        WRITE(icecat_name, '(a,i0)') 'd_qlshd_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qlshd_)
+        WRITE(icecat_name, '(a,i0)') 'd_qlcon_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qlcon_)
+        WRITE(icecat_name, '(a,i0)') 'd_qlevp_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qlevp_)
+        WRITE(icecat_name, '(a,i0)') 'd_qifrz_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qifrz_)
+        WRITE(icecat_name, '(a,i0)') 'd_qccoll_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qccoll_)
+        WRITE(icecat_name, '(a,i0)') 'd_qrcoll_', i_icecat
+        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_qrcoll_)
+!! << JM_20260407
       ENDIF
 
     END DO
