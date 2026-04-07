@@ -332,7 +332,7 @@
  f11     = 0.5*exp(2.5*(log(sig1))**2)
  f21     = 1. + 0.25*log(sig1)
 
-! note: currently/ only set for a single mode, droplet activation code needs to
+! note: currently only set for a single mode, droplet activation code needs to
 !       be modified to include the second mode
 ! mode 2
  i_rm2   = 6.7e6            ! inverse of aerosol mean size (m-1) !JM: old value 7.6923076e+5
@@ -2171,6 +2171,9 @@ END subroutine p3_init
  real, dimension(nCat) :: ncheti    ! immersion freezing droplets
  real, dimension(nCat) :: nrhetc    ! contact freezing rain
  real, dimension(nCat) :: nrheti    ! immersion freezing rain
+!! JM_20260407 >> adding modification from lachapelle: contact freezing with other ice crystals
+ real, dimension(nCat) :: nrhetic   ! contact freezing with other ice crystals (lachapelle et al. 2024)
+!! << JM_20260407
  real, dimension(nCat) :: nrshdr    ! source for rain number from collision of rain/ice above freezing and shedding
  real, dimension(nCat) :: qcshd     ! source for rain mass due to cloud water/ice collision above freezing and shedding or wet growth and shedding
  real, dimension(nCat) :: qrmul     ! change in q, ice multiplication from rime-splitnering of rain (not included in the paper)
@@ -2444,18 +2447,26 @@ call cpu_time(timer_start(1))
 ! (used for destination category upon ice initiation)
 ! note -- this code could be moved to 'p3_init'
  select case (nCat)
+!! JM_20260407 >> adding modifications from lachapelle: New method for determining threshold size difference (lachapelle et al. 2024)
     case (1)
-       deltaD_init = 999.    !not used if n_iceCat=1 (but should be defined)
+       ! deltaD_init = 999.    !not used if n_iceCat=1 (but should be defined)
+       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
     case (2)
-       deltaD_init = 500.e-6
+       ! deltaD_init = 500.e-6
+       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
     case (3)
-       deltaD_init = 400.e-6
+       ! deltaD_init = 400.e-6
+       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
     case (4)
-       deltaD_init = 235.e-6
+       ! deltaD_init = 235.e-6
+       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
     case (5)
-       deltaD_init = 175.e-6
+       ! deltaD_init = 175.e-6
+       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
     case (6:)
-       deltaD_init = 150.e-6
+       ! deltaD_init = 150.e-6
+       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
+!! << JM_20260407
  end select
 
 ! deltaD_init = 250.e-6   !for testing
@@ -2761,7 +2772,9 @@ call cpu_time(timer_start(3))
        nrhetc  = 0.;     ninuc   = 0.;     qidep   = 0.
        nrheti  = 0.;     nisub   = 0.;     qwgrth  = 0.
        qrmul   = 0.;     nimul   = 0.;     qicol   = 0.
-       nicol   = 0.;     qcmul   = 0.
+!! JM_20260407 >> adding modifications from lachapelle: contact freezing with other ice crystals
+       nicol   = 0.;     qcmul   = 0.:     nrhetic = 0.
+!! << JM_20260407
 
    ! Liquid fraction microphysical process rates (log_LiquidFrac)
        qimlt   = 0.;     qifrz    = 0.
@@ -3941,8 +3954,37 @@ call cpu_time(timer_start(3))
 
           endif
 
-   !................................................................
+!.....................................
+!! JM_20260407 >> adding modification of lachapelle: contact freezing with other ice crystals
+         !Contact freezing with other ice crystals (lachapelle et al. 2024)
+          if ( (t(i,k).lt.273.15) .and. (sum(qrcol).ge.qsmall) ) then
 
+            do iice = 1,nCat
+               ! call get_rain_dsd2(dum1,dum2,mu_rcol,lamrcol,cdistrcol,logn0rcol,1.)
+               if ((nrcol(iice).gt.nsmall) .and. (qrcol(iice).gt.qsmall)) then
+                  diam_col = (( (qrcol(iice) )*6.)/(nrcol(iice)*rho_rimeMax*pi))**thrd
+               else
+                  diam_col = 0.
+               endif
+               if ( (diam_ice(i,k,iice)*2. .le. diam_col) .and. (qitot(i,k,iice).gt.qsmall) ) then  !ML
+                  call icecat_destination(qitot(i,k,:)*iSCF(k),diam_ice(i,k,:), diam_col,&
+                  deltaD_init,iice_dest)
+                  if (iice_dest .ne. iice) then
+         
+                     nrcol(iice_dest)   = nrcol(iice_dest) + nrcol(iice)
+                     qrcol(iice_dest)   = qrcol(iice_dest) + qrcol(iice)
+
+                     nrhetic(iice_dest) = nrhetic(iice_dest) + nrcol(iice)
+                     nrhetic(iice)      = nrhetic(iice)      - nrcol(iice)
+
+                     nrcol(iice)        = 0.
+                     qrcol(iice)        = 0.
+         
+                  endif
+               endif
+            enddo
+          endif
+!! << JM_20260407
        endif growth_decay_processes
 
 !................................................................
@@ -4952,10 +4994,19 @@ call cpu_time(timer_end(6))
     do k = kbot,ktop,kdir
      do i = its,ite
           do iice = nCat,2,-1
-             tmp1 = abs(diag_di(i,k,iice)-diag_di(i,k,iice-1))
-             if (tmp1.le.deltaD_init .and. qitot(i,k,iice).gt.0. .and.                   &
-                 qitot(i,k,iice-1).gt.0.) then
-                qitot(i,k,iice-1) = qitot(i,k,iice-1) + qitot(i,k,iice)
+!! JM_20260407 << adding modification of lachapelle: new method for determining whether to merge ice categories or not
+             !  tmp1 = abs(diag_di(i,k,iice)-diag_di(i,k,iice-1))
+             !  if (tmp1.le.deltaD_init .and. qitot(i,k,iice).gt.0. .and.                   &
+             !   qitot(i,k,iice-1).gt.0.) then
+             ! Condition for new method (Lachapelle et al. 2024)
+             if ((diag_di(i,k,iice) .eq. 0.) .or. (diag_di(i,k,iice-1) .eq. 0.)) then
+                tmp1 = 10.
+             else
+                tmp1 = max( (diag_di(i,k,iice)/diag_di(i,k,iice-1)), diag_di(i,k,iice-1)/diag_di(i,k,iice) )   
+             endif
+             if (tmp1.le.deltaD_init .and. qitot(i,k,iice)>0. .and. qitot(i,k,iice-1)>0.) then
+!! << JM_20260407
+		          qitot(i,k,iice-1) = qitot(i,k,iice-1) + qitot(i,k,iice)
                 nitot(i,k,iice-1) = nitot(i,k,iice-1) + nitot(i,k,iice)
                 qirim(i,k,iice-1) = qirim(i,k,iice-1) + qirim(i,k,iice)
                 birim(i,k,iice-1) = birim(i,k,iice-1) + birim(i,k,iice)
@@ -10270,7 +10321,14 @@ else
     do iice = 1,n_cat
        if (Qi(iice) .ge. qsmall_loc) then
           all_empty = .false.
-          diff      = abs(Di(iice)-D_nuc)
+!! JM_20260407 >> adding modifications from lachapelle: New method for calculating diff (relative difference instead of absolute difference)
+         !diff      = abs(Di(iice)-D_nuc)
+          if ( (Di(iice).eq.0.) .or. (D_nuc.eq.0.) ) then
+                diff  = 10.
+          else
+                diff  = max((D_nuc/Di(iice)), Di(iice)/D_nuc ) !new method (lachapelle et al. 2024)
+          endif
+!! << JM_20260407
           if (diff .lt. mindiff) then
              mindiff   = diff
              i_mindiff = iice
