@@ -259,7 +259,7 @@
     i_cpv = i_cp
  endif
 
- mu_r_constant = 0.    !fixed shape parameter for mu_r
+ mu_r_constant = 0.    ! fixed shape parameter for mu_r
  inv_Drmax = 1./0.002  ! inverse of maximum allowed rain number-weighted mean diameter (m-1)
 
 ! limits for rime density [kg m-3]
@@ -2235,6 +2235,11 @@ END subroutine p3_init
             timeScaleFactor,dt_left,qv_tmp,t_tmp,dum1z,dum7c,dum7,fluxdiv_qil,epsiw_tot, &
             dum8,tmp3,tmp4,nccnst,qevp_satadj,supi_nuc
 
+!! JM_20260407 >> adding modification from lachapelle: FDD variables (lachapelle et al. 2024)
+ real  :: dum1_sip,dum2_sip,dum3_sip,dum4_sip,dum5_sip,dum6_sip,&
+          mu_rcol,lamrcol,cdistrcol,logn0rcol,diam_col,d_ffd_thr
+!! << JM_20260407
+
  double precision :: tmpdbl1,tmpdbl2,tmpdbl3
 
  integer :: dumi,i,k,ii,iice,iice_dest,dumj,dumii,dumjj,dumzz,tmpint1,ktop,kbot,kdir,    &
@@ -2773,7 +2778,7 @@ call cpu_time(timer_start(3))
        nrheti  = 0.;     nisub   = 0.;     qwgrth  = 0.
        qrmul   = 0.;     nimul   = 0.;     qicol   = 0.
 !! JM_20260407 >> adding modifications from lachapelle: contact freezing with other ice crystals
-       nicol   = 0.;     qcmul   = 0.:     nrhetic = 0.
+       nicol   = 0.;     qcmul   = 0.;     nrhetic = 0.
 !! << JM_20260407
 
    ! Liquid fraction microphysical process rates (log_LiquidFrac)
@@ -3550,11 +3555,11 @@ call cpu_time(timer_start(3))
                 call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,       &
                                   deltaD_init,iice_dest)
                 if (global_status /= STATUS_OK) return
-              else
+             else
                  iice_dest = 1
-              endif
-              qrheti(iice_dest) = Q_nuc
-              nrheti(iice_dest) = N_nuc
+             endif
+             qrheti(iice_dest) = Q_nuc
+             nrheti(iice_dest) = N_nuc
           endif
 
 
@@ -3643,6 +3648,64 @@ call cpu_time(timer_start(3))
 
           endif calc_HM
 
+!! JM_20260408 << adding FFD from lachapelle
+          calc_FFD:  if  ((qrcol(iice).gt.qsmall) .and. (t(i,k).gt.248.15) &
+                .and. (t(i,k).lt.270.15) .and. (diam_ice(i,k,iice).lt.1000.e-6)  ) then ! Fragmentation of freezing drops, as implemented in (lachapelle et al. 2025)
+!! JM_20260408 << adding D_new and destination category for FFD and ice loop as this was not part of the original implementation
+               if (nCat>1) then
+                  !determine destination ice-phase category
+                  D_new = 10.e-6 !assumes ice crystals from FFD are tiny
+                  call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest)
+                  if (global_status /= STATUS_OK) return
+               else
+                  iice_dest = 1
+               endif
+
+               iice_loop_FFD:  do iice = 1,nCat
+!! << JM_20260408
+                  ! get rain DSD parameters for rimed rain mass, i.e. lambda and n0r
+                  dum1_sip = qrcol(iice)
+                  dum2_sip = nrcol(iice)
+                  call get_rain_dsd2(dum1_sip,dum2_sip,mu_rcol,lamrcol,cdistrcol,logn0rcol,1.)
+
+                  ! temperature dependent scaling factor for FDD
+                  if (t(i,k).gt.267.15) then
+                     dum3_sip = (270.15-t(i,k))*(1./3.)
+                  else
+                     dum3_sip = 1.
+                  endif
+
+                  ! only consider rain drops with 100 micron < D < 3.5mm for FFD
+                  d_ffd_thr = 3500.e-6
+                  dum4_sip = lamrcol* 100.e-6
+                  dum5_sip = lamrcol* d_ffd_thr
+
+                  ! calculate the number of splinters for raindrops between 100 micron and 3.5mm using the parameterization of
+                  ! Lawson et al (2015): N_splinters = 2.5 x 10^11 D_mm^4
+                  dum6_sip = dum3_sip*2.5e-11*(1.e24)/(lamrcol**5)*(10**logn0rcol) &
+                     * (exp(-dum4_sip)*((dum4_sip)**4+4.*(dum4_sip)**3+12.*(dum4_sip)**2+24.*(dum4_sip)+24.) &
+                        -exp(-dum5_sip)*((dum5_sip)**4+4.*(dum5_sip)**3+12.*(dum5_sip)**2+24.*(dum5_sip)+24.) )
+
+                  ! adding contribution from drops larger than 3.5mm (assuming one splinter per drop)
+                  dum6_sip = dum6_sip +  (10**logn0rcol)*( exp(-lamrcol*d_ffd_thr) )/lamrcol
+
+                  ! subtract splintering from rime mass transfer
+                  qrcol(iice) = qrcol(iice) - dum6_sip * (piov6*900.*(D_new)**3)
+                  if (qrcol(iice) .lt. 0. ) then
+                     dum6_sip    = dum6_sip+qrcol(iice)/(piov6*900.*(D_new)**3)
+                     qrcol(iice) = 0.
+                  endif
+
+                  ! add contribution from FFD
+                  nimul(iice_dest) = nimul(iice_dest) + dum6_sip
+                  qrmul(iice_dest) = qrmul(iice_dest) + dum6_sip * (piov6*900.*(D_new)**3)
+               enddo iice_loop_FFD
+
+!! JM_20260408 >> adding philips FFD parameterization
+               ! Adding philips?
+!! JM_20260408
+          endif calc_FFD
+!! << JM_20260408
    !....................................................
    ! condensation/evaporation and deposition/sublimation
    !   (use semi-analytic formulation)
@@ -3967,8 +4030,8 @@ call cpu_time(timer_start(3))
                   diam_col = 0.
                endif
                if ( (diam_ice(i,k,iice)*2. .le. diam_col) .and. (qitot(i,k,iice).gt.qsmall) ) then  !ML
-                  call icecat_destination(qitot(i,k,:)*iSCF(k),diam_ice(i,k,:), diam_col,&
-                  deltaD_init,iice_dest)
+                  call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:), diam_col,&        ! JM: changing iSCF(k) --> iSCF(i,k)
+                                          deltaD_init,iice_dest)
                   if (iice_dest .ne. iice) then
          
                      nrcol(iice_dest)   = nrcol(iice_dest) + nrcol(iice)
