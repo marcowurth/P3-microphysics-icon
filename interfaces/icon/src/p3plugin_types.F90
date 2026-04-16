@@ -86,11 +86,13 @@ MODULE p3plugin_types
 !! JM_20260407 >> defining new comin handle and pointer for ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
   TYPE :: t_p3_ice_diag_2mom_handle
     TYPE(t_comin_var_handle)            :: d_qidep_, d_qisub_, d_qinuc_, d_qchetc_, d_qcheti_, d_qrhetc_, d_qrheti_, d_qrmlt_, d_qccol_, d_qrcol_, d_qwgrth_, d_qcshd_
+    TYPE(t_comin_var_handle)            :: d_nccol_, d_nrcol_, d_ninuc_, d_nimlt_, d_nisub_, d_nislf_, d_nchetc_, d_ncheti_, d_nrhetc_, d_nrheti_, d_nrhetic_, d_nrshdr_, d_ncshdc_
     TYPE(t_comin_var_handle)            :: d_qcmul_, d_qrmul_, d_nimul_
   END type t_p3_ice_diag_2mom_handle
 
   TYPE :: t_p3_ice_diag_2mom_3dptr
     REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qidep_, d_qisub_, d_qinuc_, d_qchetc_, d_qcheti_, d_qrhetc_, d_qrheti_, d_qrmlt_, d_qccol_, d_qrcol_, d_qwgrth_, d_qcshd_
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_nccol_, d_nrcol_, d_ninuc_, d_nimlt_, d_nisub_, d_nislf_, d_nchetc_, d_ncheti_, d_nrhetc_, d_nrheti_, d_nrhetic_, d_nrshdr_, d_ncshdc_
     REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qcmul_, d_qrmul_, d_nimul_
   CONTAINS
     PROCEDURE :: nullify => nullify_p3_ice_diag_2mom_3dptr
@@ -108,10 +110,12 @@ MODULE p3plugin_types
 
   TYPE :: t_p3_ice_diag_2mom_liqfrac_handle
     TYPE(t_comin_var_handle)            :: d_qimlt_, d_qwgrth1_, d_qwgrth1c_, d_qwgrth1r_, d_qlshd_, d_qlcon_, d_qlevp_, d_qifrz_, d_qccoll_, d_qrcoll_
+    TYPE(t_comin_var_handle)            :: d_nlshd_, d_nlevp_, d_nrcoll_, d_nccoll_
   END type t_p3_ice_diag_2mom_liqfrac_handle
 
   TYPE :: t_p3_ice_diag_2mom_liqfrac_3dptr
     REAL(wp), POINTER, DIMENSION(:,:,:) :: d_qimlt_, d_qwgrth1_, d_qwgrth1c_, d_qwgrth1r_, d_qlshd_, d_qlcon_, d_qlevp_, d_qifrz_, d_qccoll_, d_qrcoll_
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: d_nlshd_, d_nlevp_, d_nrcoll_, d_nccoll_
   CONTAINS
     PROCEDURE :: nullify => nullify_p3_ice_diag_2mom_liqfrac_3dptr
   END type t_p3_ice_diag_2mom_liqfrac_3dptr
@@ -165,7 +169,9 @@ CONTAINS
 !! JM_20260407 >> cleanup ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
   SUBROUTINE nullify_p3_ice_diag_2mom_3dptr(this)
     CLASS(t_p3_ice_diag_2mom_3dptr), INTENT(inout) :: this
-    NULLIFY(this%d_qidep_, this%d_qisub_, this%d_qinuc_, this%d_qchetc_, this%d_qcheti_, this%d_qrhetc_, this%d_qrheti_, this%d_qrmlt_, this%d_qccol_, this%d_qrcol_, this%d_qwgrth_, this%d_qcshd_, this%d_qcmul_, this%d_qrmul_, this%d_nimul_)
+    NULLIFY(this%d_qidep_, this%d_qisub_, this%d_qinuc_, this%d_qchetc_, this%d_qcheti_, this%d_qrhetc_, this%d_qrheti_, this%d_qrmlt_, this%d_qccol_, this%d_qrcol_, this%d_qwgrth_, this%d_qcshd_)
+    NULLIFY(this%d_nccol_, this%d_nrcol_, this%d_ninuc_, this%d_nimlt_, this%d_nisub_, this%d_nislf_, this%d_nchetc_, this%d_ncheti_, this%d_nrhetc_, this%d_nrheti_, this%d_nrhetic_, this%d_nrshdr_, this%d_ncshdc_)
+    NULLIFY(this%d_qcmul_, this%d_qrmul_, this%d_nimul_)
   END SUBROUTINE nullify_p3_ice_diag_2mom_3dptr
   
   SUBROUTINE nullify_p3_ice_diag_2mom_coll_3dptr(this)
@@ -176,6 +182,7 @@ CONTAINS
   SUBROUTINE nullify_p3_ice_diag_2mom_liqfrac_3dptr(this)
     CLASS(t_p3_ice_diag_2mom_liqfrac_3dptr), INTENT(inout) :: this
     NULLIFY(this%d_qimlt_, this%d_qwgrth1_, this%d_qwgrth1c_, this%d_qwgrth1r_, this%d_qlshd_, this%d_qlcon_, this%d_qlevp_, this%d_qifrz_, this%d_qccoll_, this%d_qrcoll_)
+    NULLIFY(this%d_nlshd_, this%d_nlevp_, this%d_nrcoll_, this%d_nccoll_)
   END SUBROUTINE nullify_p3_ice_diag_2mom_liqfrac_3dptr
 
   SUBROUTINE nullify_p3_ice_diag_3mom_3dptr(this)

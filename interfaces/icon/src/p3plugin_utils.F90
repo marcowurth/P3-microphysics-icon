@@ -39,8 +39,9 @@ CONTAINS
   END SUBROUTINE print_global_max
 
 
-  SUBROUTINE create_var(var_name, unit_name, axis_type, datatype_precision)
+  SUBROUTINE create_var(var_name, unit_name, axis_type, datatype_precision, long_name)
     CHARACTER(*), INTENT(IN) :: var_name, unit_name, axis_type, datatype_precision
+    CHARACTER(*), INTENT(IN), OPTIONAL :: long_name
     INTEGER                  :: zaxis_id, datatype
 
     IF (axis_type == '3d') THEN
@@ -57,22 +58,26 @@ CONTAINS
 
     CALL comin_var_request_add_wrapper(descriptor=t_comin_var_descriptor(name=TRIM(var_name), id=1), &
       &                                units=TRIM(unit_name), lmode_exclusive=.TRUE., zaxis_id=zaxis_id, &
-      &                                ltracer=.FALSE., lrestart=.FALSE., datatype=datatype)
+      &                                ltracer=.FALSE., lrestart=.FALSE., datatype=datatype, &
+      &                                long_name=long_name)
   END SUBROUTINE create_var
 
 
-  SUBROUTINE create_tracer(var_name, unit_name, ltracer_turb)
+  SUBROUTINE create_tracer(var_name, unit_name, ltracer_turb, long_name)
     CHARACTER(*), INTENT(IN) :: var_name, unit_name
+    CHARACTER(*), INTENT(IN), OPTIONAL :: long_name
     LOGICAL, INTENT(IN)      :: ltracer_turb
 
     CALL comin_var_request_add_wrapper(descriptor=t_comin_var_descriptor(name=TRIM(var_name), id=-1), &
       &                                units=TRIM(unit_name), lmode_exclusive=.FALSE., zaxis_id=COMIN_ZAXIS_3D, &
-                                       ltracer=.TRUE., lrestart=.FALSE., ltracer_turb=ltracer_turb)
+                                       ltracer=.TRUE., lrestart=.FALSE., ltracer_turb=ltracer_turb, &
+                                       long_name=long_name)
   END SUBROUTINE create_tracer
 
 
   SUBROUTINE comin_var_request_add_wrapper(descriptor, units, lmode_exclusive, zaxis_id, &
-                                           ltracer, lrestart, datatype, ltracer_turb)
+                                           ltracer, lrestart, datatype, ltracer_turb, &
+                                           long_name)
     TYPE(t_comin_var_descriptor), INTENT(IN)  :: descriptor
     LOGICAL,            OPTIONAL, INTENT(IN)  :: lmode_exclusive
     LOGICAL,            OPTIONAL, INTENT(IN)  :: ltracer_turb
@@ -81,6 +86,7 @@ CONTAINS
     LOGICAL,            OPTIONAL, INTENT(IN)  :: ltracer
     LOGICAL,            OPTIONAL, INTENT(IN)  :: lrestart
     CHARACTER(LEN=*),   OPTIONAL, INTENT(IN)  :: units
+    CHARACTER(LEN=*),   OPTIONAL, INTENT(IN)  :: long_name
     LOGICAL                                   :: lexclusive
 
     IF (PRESENT(lmode_exclusive)) THEN
@@ -112,6 +118,12 @@ CONTAINS
     IF (PRESENT(units)) THEN
       CALL comin_metadata_set(descriptor, "units", TRIM(units))
     END IF
+!! JM_20260415 >> adding long name
+    IF (PRESENT(long_name)) THEN
+      CALL comin_metadata_set(descriptor, "long_name", TRIM(long_name))
+    END IF
+!! << JM_20260415
+
   END SUBROUTINE comin_var_request_add_wrapper
 
   FUNCTION uppercase(word_in) RESULT(word_out)

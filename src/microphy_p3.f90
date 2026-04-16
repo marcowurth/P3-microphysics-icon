@@ -4366,6 +4366,20 @@ call cpu_time(timer_start(3))
              ice_diag_2mom(i,k,iice,13) = ice_diag_2mom(i,k,iice,13) + qcmul(iice)
              ice_diag_2mom(i,k,iice,14) = ice_diag_2mom(i,k,iice,14) + qrmul(iice)
              ice_diag_2mom(i,k,iice,15) = ice_diag_2mom(i,k,iice,15) + nimul(iice)
+             ! number concentrations
+             ice_diag_2mom(i,k,iice,16) = ice_diag_2mom(i,k,iice,16) + nccol(iice)
+             ice_diag_2mom(i,k,iice,17) = ice_diag_2mom(i,k,iice,17) + nrcol(iice)
+             ice_diag_2mom(i,k,iice,18) = ice_diag_2mom(i,k,iice,18) + ninuc(iice)
+             ice_diag_2mom(i,k,iice,19) = ice_diag_2mom(i,k,iice,19) + nimlt(iice)
+             ice_diag_2mom(i,k,iice,20) = ice_diag_2mom(i,k,iice,20) + nisub(iice)
+             ice_diag_2mom(i,k,iice,21) = ice_diag_2mom(i,k,iice,21) + nislf(iice)
+             ice_diag_2mom(i,k,iice,22) = ice_diag_2mom(i,k,iice,22) + nchetc(iice)
+             ice_diag_2mom(i,k,iice,23) = ice_diag_2mom(i,k,iice,23) + ncheti(iice)
+             ice_diag_2mom(i,k,iice,24) = ice_diag_2mom(i,k,iice,24) + nrhetc(iice)
+             ice_diag_2mom(i,k,iice,25) = ice_diag_2mom(i,k,iice,25) + nrheti(iice)
+             ice_diag_2mom(i,k,iice,26) = ice_diag_2mom(i,k,iice,26) + nrhetic(iice)
+             ice_diag_2mom(i,k,iice,27) = ice_diag_2mom(i,k,iice,27) + nrshdr(iice)
+             ice_diag_2mom(i,k,iice,28) = ice_diag_2mom(i,k,iice,28) + ncshdc(iice)
           END DO
        endif
        if (present(ice_diag_2mom_coll)) then
@@ -4389,6 +4403,11 @@ call cpu_time(timer_start(3))
                ice_diag_2mom_liqfrac(i,k,iice,8)  = ice_diag_2mom_liqfrac(i,k,iice,8)  + qifrz(iice)
                ice_diag_2mom_liqfrac(i,k,iice,9)  = ice_diag_2mom_liqfrac(i,k,iice,9)  + qccoll(iice)
                ice_diag_2mom_liqfrac(i,k,iice,10) = ice_diag_2mom_liqfrac(i,k,iice,10) + qrcoll(iice)
+               ! number consentrations 
+               ice_diag_2mom_liqfrac(i,k,iice,11) = ice_diag_2mom_liqfrac(i,k,iice,11) + nlshd(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,12) = ice_diag_2mom_liqfrac(i,k,iice,12) + nlevp(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,13) = ice_diag_2mom_liqfrac(i,k,iice,13) + nrcoll(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,14) = ice_diag_2mom_liqfrac(i,k,iice,14) + nccoll(iice)
           END DO
        endif
        if (present(ice_diag_3mom)) then
