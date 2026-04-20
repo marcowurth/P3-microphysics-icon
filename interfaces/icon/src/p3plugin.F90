@@ -214,7 +214,7 @@ CONTAINS
 !! JM_20260407 >> create new comin variabe for 2moment ice-ice collisions diagnostics
     DO i_icecat = 1, n_icecat
       DO catcoll = 1, n_icecat
-         if (i_icecat /= catcoll) then
+         if (i_icecat .ne. catcoll) then
            WRITE(icecat_name, '(a,i0,i0)') 'd_qicol_', i_icecat, catcoll
            CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp', 'change of q due to ice-ice collision between categories')
          END IF

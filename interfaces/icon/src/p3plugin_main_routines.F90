@@ -229,8 +229,8 @@ CONTAINS
       CALL p3_ice_diag_2mom(i_icecat)%d_nimul_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nimul_)
 !! << JM_20260407
 !! JM_20260407 >> extracting 2mom ice-ice collisions diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
-      DO catcoll = 1, i_icecat
-         if (i_icecat /= catcoll) then
+      DO catcoll = 1, n_icecat
+         if (i_icecat .ne. catcoll) then
            CALL p3_ice_diag_2mom_coll(i_icecat, catcoll)%d_qicol_%to_3d(p3_ice_diag_2mom_coll_3d(i_icecat, catcoll)%d_qicol_)
          END IF
       END DO
@@ -245,8 +245,6 @@ CONTAINS
 !! JM_20260407 >> integer for defining 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
     n_diag_2mom = 28
     n_diag_2mom_coll = 1
-    n_diag_2mom_liqfrac = 14
-    n_diag_3mom = 7
     ALLOCATE(ice_diag_2mom(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_diag_2mom))
     ALLOCATE(ice_diag_2mom_coll(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_icecat, n_diag_2mom_coll))
     ALLOCATE(ice_diag_2mom_liqfrac(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_diag_2mom_liqfrac))
@@ -485,8 +483,8 @@ CONTAINS
       p3_ice_diag_2mom_3d(i_icecat)%d_ncshdc_ = ice_diag_2mom(:,:,:,i_icecat,28)
 !! << JM_20260415
 !! JM_20260407 >> store computed 2mom ice-ice collision rates (need to be adjusted here when adding more diagnostics)
-      DO catcoll = 1, i_icecat
-         if (i_icecat /= catcoll) then
+      DO catcoll = 1, n_icecat
+         if (i_icecat .ne. catcoll) then
            p3_ice_diag_2mom_coll_3d(i_icecat, catcoll)%d_qicol_ = ice_diag_2mom_coll(:,:,:,i_icecat, catcoll, 1)
          END IF
       END DO
@@ -513,13 +511,13 @@ CONTAINS
     mp_vars_3d%dmean_c = diag_3d(:,:,:,1)
     mp_vars_3d%dmean_r = diag_3d(:,:,:,2)
 !! JM_20260323 >> adding warm-rain diagnostics
-    mp_vars_3d%d_qcnuc   = diag_3d(:,:,:,3)
-    mp_vars_3d%d_qccon   = diag_3d(:,:,:,4)
-    mp_vars_3d%d_qrcon   = diag_3d(:,:,:,5)
-    mp_vars_3d%d_qcevp   = diag_3d(:,:,:,6)
-    mp_vars_3d%d_qrevp   = diag_3d(:,:,:,7)
-    mp_vars_3d%d_qcacc   = diag_3d(:,:,:,8)
-    mp_vars_3d%d_qcaut   = diag_3d(:,:,:,9)
+    mp_vars_3d%d_qcnuc = diag_3d(:,:,:,3)
+    mp_vars_3d%d_qccon = diag_3d(:,:,:,4)
+    mp_vars_3d%d_qrcon = diag_3d(:,:,:,5)
+    mp_vars_3d%d_qcevp = diag_3d(:,:,:,6)
+    mp_vars_3d%d_qrevp = diag_3d(:,:,:,7)
+    mp_vars_3d%d_qcacc = diag_3d(:,:,:,8)
+    mp_vars_3d%d_qcaut = diag_3d(:,:,:,9)
 !! JM_20260323
     mp_vars_3d%deff_c = diag_effc_3d * 2.
 
@@ -533,7 +531,7 @@ CONTAINS
       mp_vars_3d%deff_i = icon_tracer_3d%qi / dummysum
     ENDIF
 
-    mp_vars_3d%dhmax = diag_dhmax_4d(:,:,:,0)
+    mp_vars_3d%dhmax = diag_dhmax_4d(:,:,:,1) ! JM???
     mp_vars_3d%dhmax_ground(:,:,1) = max(mp_vars_3d%dhmax_ground(:,:,1), diag_dhmax_4d(:,p_patch%nlev,:,1))
     mp_vars_3d%ze_p3 = diag_ze_3d
 
@@ -583,8 +581,8 @@ CONTAINS
       CALL p3_tracer_3d(i_icecat)%nullify()
 !! JM_20260407 >> nullifying ice-phase diagnostics
       CALL p3_ice_diag_2mom_3d(i_icecat)%nullify()
-      DO catcoll = 1, i_icecat
-         if (i_icecat /= catcoll) then
+      DO catcoll = 1, n_icecat
+         if (i_icecat .ne. catcoll) then
            CALL p3_ice_diag_2mom_coll_3d(i_icecat, catcoll)%nullify()
          END IF
       END DO
@@ -593,7 +591,7 @@ CONTAINS
 !! << JM_20260407
     END DO
 
-    !IF (rank_world == 0) WRITE (0,*) 'end of p3_main_wrapper'
+    IF (rank_world == 0) WRITE (0,*) 'end of p3_main_wrapper'
 
   END SUBROUTINE p3_main_wrapper
 
