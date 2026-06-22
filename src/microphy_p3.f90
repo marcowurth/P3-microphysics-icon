@@ -10202,7 +10202,7 @@ else
              dumi = min(isize-1,dumi)
 
            ! find index for rime mass fraction
-             dum4  = (min(qirim,max(qitot-qiliq,0.))/max(qitot-qiliq,epsilon(qitot)))*3. + 1.
+             dum4  = (min(qirim,max(qitot-qiliq,0.))/max(qitot-qiliq,tiny(qitot)))*3. + 1.
              dumii = int(dum4)
              ! set limits
              dum4  = min(dum4,real(rimsize))
@@ -10376,7 +10376,7 @@ else
    ! for efficiency; for now it is left in
 
                     ! find index for rime mass fraction
-                      dum4  = qirim_1/(qitot_1-qiliq_1)*3. + 1.
+                      dum4  = (min(qirim_1,max(qitot_1-qiliq_1,0.))/max(qitot_1-qiliq_1,tiny(qitot_1)))*3. + 1.
                       dumii = int(dum4)
                       dum4  = min(dum4,real(rimsize))
                       dum4  = max(dum4,1.)
@@ -10425,7 +10425,7 @@ else
                       dumic = min(iisize-1,dumic)
 
                     ! find index for rime mass fraction
-                      dum4c  = qirim_2/(qitot_2-qiliq_2)*3. + 1.
+                      dum4c  = (min(qirim_2,max(qitot_2-qiliq_2,0.))/max(qitot_2-qiliq_2,tiny(qitot_2)))*3. + 1.
                       dumiic = int(dum4c)
                       dum4c  = min(dum4c,real(rimsize))
                       dum4c  = max(dum4c,1.)
