@@ -27,8 +27,8 @@
 !    https://github.com/P3-microphysics/P3-microphysics                                    !
 !__________________________________________________________________________________________!
 !                                                                                          !
-! Version:       5.5.1                                                                     !
-! Last updated:  2026 Feb                                                                  !
+! Version:       5.5.2                                                                     !
+! Last updated:  2026 July                                                                 !
 !__________________________________________________________________________________________!
 
  MODULE microphy_p3
@@ -155,7 +155,7 @@
 
 ! Local variables and parameters:
  logical, save                  :: is_init = .false.
- character(len=1024), parameter :: version_p3                    = '5.5.1'
+ character(len=1024), parameter :: version_p3                    = '5.5.2'
  character(len=1024), parameter :: version_intended_table_1_2mom = '6.9-2momI'
  character(len=1024), parameter :: version_intended_table_1_3mom = '6.9-3momI'
  character(len=1024), parameter :: version_intended_table_2      = '6.2'
@@ -10202,7 +10202,7 @@ else
              dumi = min(isize-1,dumi)
 
            ! find index for rime mass fraction
-             dum4  = (qirim/(qitot-qiliq))*3. + 1.
+             dum4  = (min(max(qirim,0.),max(qitot-qiliq,0.))/max(qitot-qiliq,tiny(qitot)))*3. + 1.
              dumii = int(dum4)
              ! set limits
              dum4  = min(dum4,real(rimsize))
@@ -10376,7 +10376,7 @@ else
    ! for efficiency; for now it is left in
 
                     ! find index for rime mass fraction
-                      dum4  = qirim_1/(qitot_1-qiliq_1)*3. + 1.
+                      dum4  = (min(max(qirim_1,0.),max(qitot_1-qiliq_1,0.))/max(qitot_1-qiliq_1,tiny(qitot_1)))*3. + 1.
                       dumii = int(dum4)
                       dum4  = min(dum4,real(rimsize))
                       dum4  = max(dum4,1.)
@@ -10425,7 +10425,7 @@ else
                       dumic = min(iisize-1,dumic)
 
                     ! find index for rime mass fraction
-                      dum4c  = qirim_2/(qitot_2-qiliq_2)*3. + 1.
+                      dum4c  = (min(max(qirim_2,0.),max(qitot_2-qiliq_2,0.))/max(qitot_2-qiliq_2,tiny(qitot_2)))*3. + 1.
                       dumiic = int(dum4c)
                       dum4c  = min(dum4c,real(rimsize))
                       dum4c  = max(dum4c,1.)
@@ -10699,7 +10699,10 @@ else
     bi_rim = 0.
  elseif (qi_rim.gt.(qi_tot-qi_liq) .and. rho_rime.gt.0.) then
   !set upper constraint qi_rim <= qi_tot
-    qi_rim = qi_tot-qi_liq
+  !floored at 0 for the anomalous state qi_liq > qi_tot (possible after sedimentation
+  !in drained cells); a negative qi_rim here corrupts the prognostic arrays and
+  !overflows int(dum4) in find_lookupTable_indices_1a/_2 on FPE-trapping builds
+    qi_rim = max(qi_tot-qi_liq, 0.)
     bi_rim = qi_rim/rho_rime
  endif
 
