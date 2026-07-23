@@ -23,6 +23,9 @@ MODULE p3plugin_global_vars
   PUBLIC :: icon_tracer, p3_tracer
   PUBLIC :: icon_tracer_ddt_turb, p3_tracer_ddt_turb
   PUBLIC :: autoAccr_param_in
+!! JM_20260629 >> adding n_inact as argument for depletion of INPs
+  PUBLIC :: n_inact
+!! << JM_20260629
 !! JM_20260407 >> defining new comin handle for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
   PUBLIC :: p3_ice_diag_2mom, p3_ice_diag_2mom_coll, p3_ice_diag_2mom_liqfrac, p3_ice_diag_3mom
 !! << JM_20260407
@@ -32,6 +35,9 @@ MODULE p3plugin_global_vars
   INTEGER        :: n_icecat, itracer_ini, fastphystep
   REAL           :: dtime
   LOGICAL        :: l3mom_ice, lliqfrac
+!! JM_20260629 >> adding n_inact as argument for depletion of INPs
+  REAL, ALLOCATABLE :: n_inact(:,:,:)
+!! << JM_20260629
   CHARACTER(999) :: tracer_ini_filename, lookup_tables_path
 !! JM_20260331 >> adding default value here, as it will be initialized with 0 when no value is given in the p3-nml block
   INTEGER        :: autoAccr_param_in = 2

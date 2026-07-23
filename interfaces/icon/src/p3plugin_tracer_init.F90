@@ -19,7 +19,9 @@ MODULE p3plugin_tracer_init
     &                                 dtime, fastphystep, n_icecat, itracer_ini, l3mom_ice, lliqfrac,       &
     &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,           &
     &                                 dyn_vars, icon_tracer, mp_vars, p3_tracer, autoAccr_param_in
-
+!! JM_20260629 >> adding n_inact as argument for depletion of INPs
+  USE p3plugin_global_vars,    ONLY : n_inact
+!! << JM_20260629
   USE microphy_p3,             ONLY : p3_init, status_ok
 
   IMPLICIT NONE
@@ -73,6 +75,14 @@ CONTAINS
 
     dtime = comin_descrdata_get_timesteplength(1)
     fastphystep = 1
+
+!! JM_20260629 >> adding n_inact as argument for depletion of INPs
+    if (.not. allocated(n_inact)) then
+      allocate(n_inact(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
+    endif
+    n_inact(:,:,:) = 0.0
+    IF (rank_world == 0) WRITE (0,*) 'initialized n_inact to zero for all cells'
+!! << JM_20260629
 
     CALL mp_vars%ice_gsp_rate%to_3d(mp_vars_3d%ice_gsp_rate)
     CALL mp_vars%ice_gsp%to_3d(mp_vars_3d%ice_gsp)

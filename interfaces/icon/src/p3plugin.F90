@@ -119,18 +119,18 @@ CONTAINS
 
 
     ! create new vars in ICON
-    CALL create_var('theta_old', 'K', '3d', 'dp')
-    CALL create_var('qv_old', 'kg kg-1', '3d', 'dp')
-    CALL create_var('ddt_temp_phys', 'K s-1', '3d', 'dp')
-    CALL create_var('dmean_c', 'm', '3d', 'dp', 'mean diamter of cloud droplets')
-    CALL create_var('dmean_r', 'm', '3d', 'dp', 'mean diamter of rain drops')
+    CALL create_var('theta_old', 'K', '3d', 'dp', 'potential temperature at beginning of time step')
+    CALL create_var('qv_old', 'kg kg-1', '3d', 'dp', 'qv at beginning of time step')
+    CALL create_var('ddt_temp_phys', 'K s-1', '3d', 'dp', 'temperature tendency from physics')
+    CALL create_var('dmean_c', 'm', '3d', 'dp', 'number-weighted mean diamter of cloud droplets')
+    CALL create_var('dmean_r', 'm', '3d', 'dp', 'number-weighted mean diamter of rain drops')
     CALL create_var('deff_c', 'm', '3d', 'dp', 'effective diamter of cloud droplets')
-    CALL create_var('deff_i', 'm', '3d', 'dp', 'effective diameter of rain drops')
-    CALL create_var('reff_qc', 'm', '3d', 'dp')
+    CALL create_var('deff_i', 'm', '3d', 'dp')
+    CALL create_var('reff_qc', 'm', '3d', 'dp', 'effective radius of cloud droplets')
     CALL create_var('reff_qi', 'm', '3d', 'dp')
-    CALL create_var('dhmax', 'm', '3d', 'dp')
-    CALL create_var('dhmax_ground', 'm', '2d', 'dp')
-    CALL create_var('ze_p3', 'dBZ', '3d', 'dp')
+    CALL create_var('dhmax', 'm', '3d', 'dp', 'maximum hail size')
+    CALL create_var('dhmax_ground', 'm', '2d', 'dp', 'maximum hail size at ground')
+    CALL create_var('ze_p3', 'dBZ', '3d', 'dp', 'equivalent reflectivity')
 !! JM_20260323 >> adding warm-rain diagnostic
     CALL create_var('d_qcnuc', 'kg kg-1', '3d', 'dp', 'activation of cloud droplets from CCN')
     CALL create_var('d_qccon', 'kg kg-1', '3d', 'dp', 'cloud droplet condensation')
@@ -147,10 +147,10 @@ CONTAINS
       WRITE(icecat_name, '(a,i0)') 'deff_i', i_icecat
       CALL create_var(icecat_name, 'm', '3d', 'dp', 'effective diameter of ice')
       WRITE(icecat_name, '(a,i0)') 'rho_i', i_icecat
-      CALL create_var(icecat_name, 'kg m-3', '3d', 'dp', 'density of ice')
+      CALL create_var(icecat_name, 'kg m-3', '3d', 'dp', 'bulk density of ice')
       WRITE(icecat_name, '(a,i0)') 'vm_i', i_icecat
-      CALL create_var(icecat_name, 'm s-1', '3d', 'dp') ! JM: termal fall velocity?
-!! JM_20260407 >> create new comin variabes for 2moment ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
+      CALL create_var(icecat_name, 'm s-1', '3d', 'dp', 'mass-weighted fall velocity of ice')
+!! JM_20260407 >> create new comin variables for 2moment ice-phase diagnostics (need to be adjusted here when adding more diagnostics)
       WRITE(icecat_name, '(a,i0)') 'd_qidep_', i_icecat
       CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp', 'vapor depositon')
       WRITE(icecat_name, '(a,i0)') 'd_qisub_', i_icecat
@@ -196,8 +196,6 @@ CONTAINS
       CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'contact freezing rain drops')
       WRITE(icecat_name, '(a,i0)') 'd_nrheti_', i_icecat
       CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'immersion freezing rain drops')
-      WRITE(icecat_name, '(a,i0)') 'd_nrhetic_', i_icecat
-      CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'contact freezing with other ice crystals')
       WRITE(icecat_name, '(a,i0)') 'd_nrshdr_', i_icecat
       CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'source for rain number from rain drops-ice collision above freezing and shedding')
       WRITE(icecat_name, '(a,i0)') 'd_ncshdc_', i_icecat
@@ -206,10 +204,28 @@ CONTAINS
       WRITE(icecat_name, '(a,i0)') 'd_qcmul_', i_icecat
       CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp', 'rime-splintering with cloud droplets')
       WRITE(icecat_name, '(a,i0)') 'd_qrmul_', i_icecat
-      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp', 'rime-splintering/FFD with rain drops')
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp', 'rime-splintering with rain drops')
       WRITE(icecat_name, '(a,i0)') 'd_nimul_', i_icecat
-      CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'ice multiplication from rime-splintering/FFD')
+      CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'ice multiplication from rime-splintering')
 !! << JM_20260407
+!! JM_20260619 >> create new comin variables: ffd during refreezing, immersion freezing and riming
+      WRITE(icecat_name, '(a,i0)') 'd_qimul_ffd_frz_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp', 'ice multiplication from FFD (refreezing of rain)')
+      WRITE(icecat_name, '(a,i0)') 'd_nimul_ffd_frz_', i_icecat
+      CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'ice multiplication from FFD (refreezing of rain)')
+      WRITE(icecat_name, '(a,i0)') 'd_qimul_ffd_imm_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp', 'ice multiplication from FFD (immersion freezing of rain)')
+      WRITE(icecat_name, '(a,i0)') 'd_nimul_ffd_imm_', i_icecat
+      CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'ice multiplication from FFD (immersion freezing of rain)')
+      WRITE(icecat_name, '(a,i0)') 'd_qimul_ffd_rim_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp', 'ice multiplication from FFD (riming)')
+      WRITE(icecat_name, '(a,i0)') 'd_nimul_ffd_rim_', i_icecat
+      CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'ice multiplication from FFD (riming)')
+      WRITE(icecat_name, '(a,i0)') 'd_qcmul_ffd_rim_', i_icecat
+      CALL create_var(icecat_name, 'kg kg-1', '3d', 'dp', 'cloud droplet multiplication from FFD (riming)')
+      WRITE(icecat_name, '(a,i0)') 'd_ncmul_ffd_rim_', i_icecat
+      CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'cloud droplet multiplication from FFD (riming)')
+!! << JM_20260619
     END DO
 !! JM_20260407 >> create new comin variabe for 2moment ice-ice collisions diagnostics
     DO i_icecat = 1, n_icecat
@@ -309,7 +325,9 @@ CONTAINS
         WRITE(icecat_name, '(a,i0)') 'd_nccoll_', i_icecat
         CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'collection of cloud by mixed-phase ice (T>0C)')
         WRITE(icecat_name, '(a,i0)') 'd_nrcoll_', i_icecat
-        CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'collection of rain by mixed-phase ice (T>0C)')
+        CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'collection of rain by mixed-phase ice (T>0C)')      
+        WRITE(icecat_name, '(a,i0)') 'd_nifrz_', i_icecat
+        CALL create_var(icecat_name, 'kg-1', '3d', 'dp', 'refreezing of mixed-phase ice')
 !! << JM_20260415
       END DO
     ENDIF
@@ -381,7 +399,7 @@ CONTAINS
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qrcon', id), IOR(FR, FW), mp_vars%d_qrcon)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcevp', id), IOR(FR, FW), mp_vars%d_qcevp)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qrevp', id), IOR(FR, FW), mp_vars%d_qrevp)
-    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcacc',  id), IOR(FR, FW), mp_vars%d_qcacc)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcacc', id), IOR(FR, FW), mp_vars%d_qcacc)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcaut', id), IOR(FR, FW), mp_vars%d_qcaut)
 !! << JM_20260323
 
@@ -452,8 +470,6 @@ CONTAINS
       CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_nrhetc_)
       WRITE(icecat_name, '(a,i0)') 'd_nrheti_', i_icecat
       CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_nrheti_)
-      WRITE(icecat_name, '(a,i0)') 'd_nrhetic_', i_icecat
-      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_nrhetic_)
       WRITE(icecat_name, '(a,i0)') 'd_nrshdr_', i_icecat
       CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_nrshdr_)
       WRITE(icecat_name, '(a,i0)') 'd_ncshdc_', i_icecat
@@ -466,6 +482,24 @@ CONTAINS
       WRITE(icecat_name, '(a,i0)') 'd_nimul_', i_icecat
       CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_nimul_)
 !! << JM_20260407
+!! JM_20260619 >> registering new diagnostics: ffd during refreezing, immersion freezing and riming
+      WRITE(icecat_name, '(a,i0)') 'd_qimul_ffd_frz_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qimul_ffd_frz_)
+      WRITE(icecat_name, '(a,i0)') 'd_nimul_ffd_frz_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_nimul_ffd_frz_)
+      WRITE(icecat_name, '(a,i0)') 'd_qimul_ffd_imm_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qimul_ffd_imm_)
+      WRITE(icecat_name, '(a,i0)') 'd_nimul_ffd_imm_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_nimul_ffd_imm_)
+      WRITE(icecat_name, '(a,i0)') 'd_qimul_ffd_rim_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qimul_ffd_rim_)
+      WRITE(icecat_name, '(a,i0)') 'd_nimul_ffd_rim_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_nimul_ffd_rim_)
+      WRITE(icecat_name, '(a,i0)') 'd_qcmul_ffd_rim_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_qcmul_ffd_rim_)
+      WRITE(icecat_name, '(a,i0)') 'd_ncmul_ffd_rim_', i_icecat
+      CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom(i_icecat)%d_ncmul_ffd_rim_)
+!! << JM_20260619
 !! JM_20260407 >> registering new 2moment ice-ice collision diagnostics
       DO catcoll = 1, n_icecat
          if (i_icecat /= catcoll) then
@@ -543,6 +577,8 @@ CONTAINS
        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_nrcoll_)
        WRITE(icecat_name, '(a,i0)') 'd_nccoll_', i_icecat
        CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_nccoll_)
+       WRITE(icecat_name, '(a,i0)') 'd_nifrz_', i_icecat
+       CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor(TRIM(icecat_name), id), IOR(FR, FW), p3_ice_diag_2mom_liqfrac(i_icecat)%d_nifrz_)
 !! << JM_20260415
       ENDIF
 

@@ -283,7 +283,7 @@
 !bimm   = 100.
 !aimm   = 0.66
 ! Barklie and Gokhale (1959)
- bimm   = 2.
+ bimm   = 200. ! JM note: changed bimm from 2 to 200 to match the same value as in SB for rain water
  aimm   = 0.65
  rin    = 0.1e-6
  mi0    = 4.*piov3*900.*1.e-18
@@ -325,6 +325,8 @@
  bact   = vi*osm*epsm*mw*rhoa/(map*rhow) ! eq 9a of MG07, assumes beta is 0.5
 ! inv_bact = (map*rhow)/(vi*osm*epsm*mw*rhoa)    *** to replace /bact **
 
+!! JM_20260630 >> changing aerosol parameters to match PSD from observatinal data:
+!!                Both modes are calculated using Particle_Size_Distribution_Log_Fit_Python model from theodore khadir
 ! mode 1
  i_rm1   = 3.1e+7          ! inverse of aerosol mean size (m-1) !JM: old value 2.e+7
  sig1    = 1.75            ! aerosol standard deviation         !JM: old value 2.0
@@ -340,6 +342,7 @@
  nanew2  = 160e6            ! aerosol number mixing ratio (kg-1) !JM: old value 0
  f12     = 0.5*exp(2.5*(log(sig2))**2)
  f22     = 1. + 0.25*log(sig2)
+!! << JM_20260630
 
 !Dmin_HM  = 1000.e-6       ! ice size threshold for rime-splintering (HM)
 !Dinit_HM =   10.e-6       ! initial ice diameter for rime splinters
@@ -1989,8 +1992,11 @@ END subroutine p3_init
                     prt_snow,prt_grpl,prt_pell,prt_hail,prt_sndp,prt_wsnow,qi_type,       &
                     diag_vis,diag_vis1,diag_vis2,diag_vis3,diag_dhmax,supi_nuc_in,        &
                     freq3Ddiag_in,timer,timer_description,                                &
+!! JM_20260629 >> adding n_inact as an argument for the depletion of INPs
+                    n_inact,                                                              &
+!! JM_20260629
 !! JM_20260407 >> adding arguments for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-                    n_diag_2mom,n_diag_2mom_coll,n_diag_2mom_liqfrac,n_diag_3mom,      &
+                    n_diag_2mom,n_diag_2mom_coll,n_diag_2mom_liqfrac,n_diag_3mom,         &
                     ice_diag_2mom,ice_diag_2mom_coll,ice_diag_2mom_liqfrac,ice_diag_3mom)
 !! << JM_20260407
 
@@ -2069,6 +2075,9 @@ END subroutine p3_init
  real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_2mom_liqfrac), optional   :: ice_diag_2mom_liqfrac ! user-defined 4D diagnostic fields for ice-liquid diagnostics
  real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_3mom), optional           :: ice_diag_3mom         ! user-defined 4D diagnostic fields for ice-phase 3-moment diagnostics
 !! << JM_20260407
+!! JM_20260629 >> adding 4230553 as an argument for the depletion of INPs
+ real, intent(inout), dimension(its:ite,kts:kte), optional :: n_inact ! number of activated INPs  # kg-1
+!! << JM_20260629
 
  integer, intent(in)                                  :: it              ! time step counter (starts at 1 for first step)
 
@@ -2171,9 +2180,6 @@ END subroutine p3_init
  real, dimension(nCat) :: ncheti    ! immersion freezing droplets
  real, dimension(nCat) :: nrhetc    ! contact freezing rain
  real, dimension(nCat) :: nrheti    ! immersion freezing rain
-!! JM_20260407 >> adding modification from lachapelle: contact freezing with other ice crystals
- real, dimension(nCat) :: nrhetic   ! contact freezing with other ice crystals (lachapelle et al. 2024)
-!! << JM_20260407
  real, dimension(nCat) :: nrshdr    ! source for rain number from collision of rain/ice above freezing and shedding
  real, dimension(nCat) :: qcshd     ! source for rain mass due to cloud water/ice collision above freezing and shedding or wet growth and shedding
  real, dimension(nCat) :: qrmul     ! change in q, ice multiplication from rime-splitnering of rain (not included in the paper)
@@ -2188,6 +2194,17 @@ END subroutine p3_init
  real, dimension(nCat) :: zislf     ! zi change from self-collection
  real, dimension(nCat) :: zishd     ! zi change from shedding
  real, dimension(nCat) :: zqrcol    ! zi change from ice-rain collection
+
+! JM_20260619 >> adding FFD multiplication variables
+ real, dimension(nCat) :: qimul_ffd_frz ! change in qi, ice multiplication from refreezing of mixed-phase ice
+ real, dimension(nCat) :: nimul_ffd_frz ! change in ni, ice multiplication from refreezing of mixed-phase ice
+ real, dimension(nCat) :: qimul_ffd_imm ! change in qi, ice multiplication from immersion freezing of rain
+ real, dimension(nCat) :: nimul_ffd_imm ! change in ni, ice multiplication from immersion freezing of rain
+ real, dimension(nCat) :: qimul_ffd_rim ! change in qi, ice multiplication from FFD during riming with rain
+ real, dimension(nCat) :: nimul_ffd_rim ! change in ni, ice multiplication from FFD during riming with rain
+ real, dimension(nCat) :: qcmul_ffd_rim ! change in qc
+ real, dimension(nCat) :: ncmul_ffd_rim ! change in nc
+! << JM_20260619
 
  real, dimension(nCat,nCat) :: nicol ! change of N due to ice-ice collision between categories
  real, dimension(nCat,nCat) :: qicol ! change of q due to ice-ice collision between categories
@@ -2207,7 +2224,9 @@ END subroutine p3_init
  real, dimension(nCat) :: nrcoll     ! collection of rain by mixed-phase ice (T>0C)
  real, dimension(nCat) :: qccoll     ! collection of cloud by mixed-phase ice (T>0C)
  real, dimension(nCat) :: nccoll     ! collection of cloud by mixed-phase ice (T>0C)
-
+!! JM_20260708 >> adding nifrz
+ real, dimension(nCat) :: nifrz      ! number of fully frozen ice particles formed by refreezing of mixed-phase ice
+!! << JM_20260708
  logical, dimension(nCat)   :: log_wetgrowth
 
  real, dimension(nCat) :: Eii_fact,epsi,epsiw
@@ -2236,9 +2255,27 @@ END subroutine p3_init
             dum8,tmp3,tmp4,nccnst,qevp_satadj,supi_nuc
 
 !! JM_20260407 >> adding modification from lachapelle: FDD variables (lachapelle et al. 2024)
- real  :: dum1_sip,dum2_sip,dum3_sip,dum4_sip,dum5_sip,dum6_sip,&
-          mu_rcol,lamrcol,cdistrcol,logn0rcol,diam_col,d_ffd_thr
+!  real    :: dum1_sip,dum2_sip,dum3_sip,dum4_sip,dum5_sip,dum6_sip,&
+!             mu_rcol,lamrcol,cdistrcol,logn0rcol,diam_col,d_ffd_thr
 !! << JM_20260407
+
+!! JM_20260629 >> adding variables for Schneider et al. immersion freezing parameterization of cloud droplets
+ real    :: temp
+ real    :: a1, a2, b1, b2
+ real    :: qi_min
+!! << JM_20260629
+
+!! JM_20260427 >> adding variables for Sullivan FFD parameterization
+ real    :: p_DS, N_DS, p_max, norm_temp, norm_sigma, eta_DS
+ integer :: iice_dest_ffd
+!! << JM_20260427
+
+!! JM_20260602 >> adding variables for Phillips FFD parameterization
+ real    :: mu_r_const, lam_r_const, dum1_small, dum1_big, dum2_small, dum2_big, &
+            dum1_ice, dum1_cld, dum2_ice, dum2_cld, &
+            D_small, D_big, d_rain, m_rain, v_qrain, m_ice, v_qice, &
+            ns_frag, nb_frag, N_splashes, E_freeze, phi, qc_min
+!! << JM_20260602
 
  double precision :: tmpdbl1,tmpdbl2,tmpdbl3
 
@@ -2451,27 +2488,24 @@ call cpu_time(timer_start(1))
 ! Determine threshold size difference [m] as a function of nCat
 ! (used for destination category upon ice initiation)
 ! note -- this code could be moved to 'p3_init'
- select case (nCat)
-!! JM_20260407 >> adding modifications from lachapelle: New method for determining threshold size difference (lachapelle et al. 2024)
-    case (1)
-       ! deltaD_init = 999.    !not used if n_iceCat=1 (but should be defined)
-       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
-    case (2)
-       ! deltaD_init = 500.e-6
-       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
-    case (3)
-       ! deltaD_init = 400.e-6
-       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
-    case (4)
-       ! deltaD_init = 235.e-6
-       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
-    case (5)
-       ! deltaD_init = 175.e-6
-       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
-    case (6:)
-       ! deltaD_init = 150.e-6
-       deltaD_init =  1.1      !For new method (lachapelle et al. 2024)
+
+!! JM_20260407 >> Modifications: New method for determining threshold size difference (lachapelle et al. 2024)
+! deltaD_init =  1.1
 !! << JM_20260407
+
+ select case (nCat)
+    case (1)
+       deltaD_init = 999.    !not used if n_iceCat=1 (but should be defined)
+    case (2)
+       deltaD_init = 500.e-6
+    case (3)
+       deltaD_init = 400.e-6
+    case (4)
+       deltaD_init = 235.e-6
+    case (5)
+       deltaD_init = 175.e-6
+    case (6:)
+       deltaD_init = 150.e-6
  end select
 
 ! deltaD_init = 250.e-6   !for testing
@@ -2526,6 +2560,29 @@ call cpu_time(timer_start(1))
 !rhorime_r  = 400.
  f1pr22     = -99.  !to avoid uninialized variable (in case of accidental use)
  f1pr23     = -99.
+
+!! JM_20260629 >> adding initialization for Schneider et al. immersion freezing parameterization of cloud droplets
+   a1 = 0.074
+   a2 = -18
+   b1 = -0.504
+   b2 = 127
+   qi_min = 1e-12
+!! << JM_20260629
+!! JM_20260427 >> adding initialization for Sullivan et al. FFD parameterization
+   p_max      = 0.2
+   norm_temp  = 258.
+   norm_sigma = 3.
+   eta_DS     = 6.
+   p_DS       = 0.
+   N_DS       = 0.
+!! << JM_20260427
+!! JM_20260622 >> adding initialization for Phillips et al. FFD parameterization
+   E_freeze   = 1.
+   phi        = 0.3
+   qc_min     = 4.2e-15
+   ns_frag    = 0.
+   nb_frag    = 0.
+!! << JM_20260622
 
  if (present(supi_nuc_in)) then
     supi_nuc = supi_nuc_in   !passed in from driving model
@@ -2767,7 +2824,7 @@ call cpu_time(timer_start(3))
        ncautc  = 0.;     qcnuc   = 0.;     nrslf   = 0.
        nrevp   = 0.;     ncautr  = 0.
 
-    ! initialize ice-phase  process rates
+    ! initialize ice-phase process rates
        qchetc  = 0.;     qisub   = 0.;     nrshdr  = 0.
        qcheti  = 0.;     qrcol   = 0.;     qcshd   = 0.
        qrhetc  = 0.;     qrmlt   = 0.;     qccol   = 0.
@@ -2777,9 +2834,13 @@ call cpu_time(timer_start(3))
        nrhetc  = 0.;     ninuc   = 0.;     qidep   = 0.
        nrheti  = 0.;     nisub   = 0.;     qwgrth  = 0.
        qrmul   = 0.;     nimul   = 0.;     qicol   = 0.
-!! JM_20260407 >> adding modifications from lachapelle: contact freezing with other ice crystals
-       nicol   = 0.;     qcmul   = 0.;     nrhetic = 0.
-!! << JM_20260407
+       nicol   = 0.;     qcmul   = 0.
+! JM_20260619 >> adding multiple processes for FFD Phillips
+       qimul_ffd_frz = 0.; nimul_ffd_frz = 0.
+       qimul_ffd_imm = 0.; nimul_ffd_imm = 0.
+       qimul_ffd_rim = 0.; nimul_ffd_rim = 0.
+       qcmul_ffd_rim = 0.; ncmul_ffd_rim = 0.
+! << JM_20260619
 
    ! Liquid fraction microphysical process rates (log_LiquidFrac)
        qimlt   = 0.;     qifrz    = 0.
@@ -2787,7 +2848,9 @@ call cpu_time(timer_start(3))
        qlevp   = 0.;     nlevp    = 0.;     qrcoll  = 0.
        nrcoll  = 0.;     qccoll   = 0.;     nccoll  = 0.
        qwgrth1 = 0.;     qwgrth1c = 0.;     qwgrth1r = 0.
-
+!! JM_20260708 >> adding nifrz
+       nifrz   = 0.
+!! << JM_20260708
    ! Full 3-moment rates
        zqccol = 0.;      zidep    = 0.;     zisub   = 0.
        zimlt  = 0.;      zislf    = 0.;     zishd   = 0.
@@ -3406,6 +3469,105 @@ call cpu_time(timer_start(3))
                                 0.5)*((t(i,k)-trplpt)*(-kap)+rho(i,k)*enthls(i,k)*dv*   &
                                 (qsat0-Qv_cld(i,k))*2.*pi/xlf(i,k)))*nitot(i,k,iice)
                   qifrz(iice) = min(max(qifrz(iice),0.),qiliq(i,k,iice)*i_dt)
+!! JM_20260619 << adding how many rain drops refreeze.
+                  nifrz(iice) = qifrz(iice)/qiliq(i,k,iice)*nitot(i,k,iice)
+!! << JM_20260619
+
+!! JM_20260427 >> adding Sullivan FFD parameterization
+                  ! !--- SULLIVAN FFD parameterization ---!
+                  ! if (nCat>1) then
+                  !    !determine destination ice-phase category
+                  !    D_new = 10.e-6 !assumes ice crystals from FFD are tiny
+                  !    call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest_ffd)
+                  !    if (global_status /= STATUS_OK) return
+                  ! else
+                  !    iice_dest_ffd = 1
+                  ! endif
+
+                  ! p_DS = p_max * EXP(-((t(i,k) - norm_temp)/(2.0**0.5*norm_sigma))**2.0)
+                  ! N_DS = MAX(p_DS * eta_DS, 0.0)
+                  ! dum1 = MAX(nifrz(iice) * N_DS, 0.0)
+                  ! dum2 = dum1 * piov6 * 900. * D_new**3
+                  ! qifrz(iice) = qifrz(iice) - dum2
+                  ! if (qifrz(iice) .lt. 0.0) then
+                  !    dum2 = qifrz(iice) + dum2
+                  !    qifrz(iice) = 0.0
+                  !    nifrz(iice) = 0.0
+                  ! endif
+                  ! qimul_ffd_frz(iice_dest_ffd) = qimul_ffd_frz(iice_dest_ffd) + dum2
+                  ! nimul_ffd_frz(iice_dest_ffd) = nimul_ffd_frz(iice_dest_ffd) + dum1
+                  ! !--- SULLIVAN FFD parameterization ---!
+!! << JM_20260427
+!! JM_20260602 >> adding Phillips FFD parameterisation
+                  ! !--- PHILLIPS FFD parameterization ---!
+
+                  ! !-- calculate mean rain drop diameter (based on rain DSD)
+                  ! !-- We assume that the liquid water on a mixed-phase particle that freezes is the same as the mass of pure 
+                  ! !   rain drops that would freeze.
+                  
+                  ! qifrz_present: if (qifrz(iice) .ge. qsmall) then
+                  !    !
+                  !    ! JM note: is it correct to use the rain dsd here with qifrz and nifrz? I guess using rain does not make sense here because rain is not part of that freezing process
+                  !    ! 
+                  !    call get_rain_dsd2(qifrz(iice),nifrz(iice),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+                  !    d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
+                  !    ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
+
+                  !    !-- calculate mean rain drop mass
+                  !    m_rain = piov6 * 1000 * d_rain**3 ! mass of mean rain drop for FFD, assuming density of 1000 kg/m3
+
+                  !    !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
+                  !    !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
+                  !    call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
+                     
+                  !    !-- number of fragments from FFD 
+                  !    dum1_small = ns_frag * nifrz(iice)                     ! total number of small fragments from FFD
+                  !    dum1_big   = nb_frag * nifrz(iice)                     ! total number of big fragments from FFD
+         
+                  !    !-- mass of fragments from FFD
+                  !    dum2_small = dum1_small * piov6 * 900 * D_new**3 ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
+                  !    dum2_big   = dum1_big * 1./2. * m_rain           ! assumes big fragments have mass equal to half of the mean rain drop mass
+
+                  !    !-- small fragments from FFD
+                  !    if (nCat>1) then
+                  !       !determine destination ice-phase category
+                  !       D_small = 10.e-6 ! assumes ice crystals from FFD are tiny
+                  !       call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
+                  !       if (global_status /= STATUS_OK) return
+                  !    else
+                  !       iice_dest_ffd = 1
+                  !    endif
+                     
+                  !    qifrz(iice) = qifrz(iice) - dum2_small
+                  !    if (qifrz(iice) .lt. 0.0 ) then
+                  !       dum2_small = qifrz(iice) + dum2_small
+                  !       qifrz(iice) = 0.0
+                  !       nifrz(iice) = 0.0
+                  !    endif
+                  !    qimul_ffd_frz(iice_dest_ffd) = qimul_ffd_frz(iice_dest_ffd) + dum2_small
+                  !    nimul_ffd_frz(iice_dest_ffd) = nimul_ffd_frz(iice_dest_ffd) + dum1_small
+
+                  !    !-- big fragments from FFD
+                  !    if (nCat>1) then
+                  !       !determine destination ice-phase category
+                  !       D_big = (( (1./2.*m_rain)*6.)/(920*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2*m_rain
+                  !       call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
+                  !       if (global_status /= STATUS_OK) return
+                  !    else
+                  !       iice_dest_ffd = 1
+                  !    endif
+
+                  !    qifrz(iice) = qifrz(iice) - dum2_big
+                  !    if (qifrz(iice) .lt. 0.0 ) then
+                  !       dum2_big = qifrz(iice) + dum2_big
+                  !       qifrz(iice) = 0.0
+                  !       nifrz(iice) = 0.0
+                  !    endif
+                  !    qimul_ffd_frz(iice_dest_ffd) = qimul_ffd_frz(iice_dest_ffd) + dum2_big
+                  !    nimul_ffd_frz(iice_dest_ffd) = nimul_ffd_frz(iice_dest_ffd) + dum1_big
+                  ! endif qifrz_present
+                  ! !--- PHILLIPS FFD parameterization ---!
+!! << JM_20260602
                 endif
              ! Shedding
                 tmp1=0.
@@ -3504,34 +3666,67 @@ call cpu_time(timer_start(3))
    !         qchetc(iice) = pi*pi/3.*Dap*Nacnt*rhow*cdist1(i,k)*gamma(mu_c(i,k)+5.)/lamc(i,k)**4
    !         nchetc(iice) = 2.*pi*Dap*Nacnt*cdist1(i,k)*gamma(mu_c(i,k)+2.)/lamc(i,k)
    ! for future: calculate gamma(mu_c+4) in one place since its used multiple times
-             dum   = (1./lamc(i,k))**3
+            !  dum   = (1./lamc(i,k))**3 ! JM: turned off immersion freezing of cloud droplets via jhet 
    !         qcheti(iice_dest) = cons6*cdist1(i,k)*gamma(7.+pgam(i,k))*exp(aimm*(trplpt-t(i,k)))*dum**2
    !         ncheti(iice_dest) = cons5*cdist1(i,k)*gamma(pgam(i,k)+4.)*exp(aimm*(trplpt-t(i,k)))*dum
 
-   !           Q_nuc = cons6*cdist1(i,k)*gamma(7.+mu_c(i,k))*exp(aimm*(trplpt-t(i,k)))*dum**2
-   !           N_nuc = cons5*cdist1(i,k)*gamma(mu_c(i,k)+4.)*exp(aimm*(trplpt-t(i,k)))*dum
-   !          tmp1 = cdist1(i,k)*exp(aimm*(trplpt-t(i,k)))
-   !          Q_nuc = cons6*gamma(7.+mu_c(i,k))*tmp1*dum**2
-   !          N_nuc = cons5*gamma(mu_c(i,k)+4.)*tmp1*dum
-              tmpdbl1  = dexp(dble(aimm*(trplpt-t(i,k))))
-              tmpdbl2  = dble(dum)
-              Q_nuc = cons6*cdist1(i,k)*gamma(7.+mu_c(i,k))*tmpdbl1*tmpdbl2**2
-              N_nuc = cons5*cdist1(i,k)*gamma(mu_c(i,k)+4.)*tmpdbl1*tmpdbl2
+   !         Q_nuc = cons6*cdist1(i,k)*gamma(7.+mu_c(i,k))*exp(aimm*(trplpt-t(i,k)))*dum**2
+   !         N_nuc = cons5*cdist1(i,k)*gamma(mu_c(i,k)+4.)*exp(aimm*(trplpt-t(i,k)))*dum
+   !         tmp1 = cdist1(i,k)*exp(aimm*(trplpt-t(i,k)))
+   !         Q_nuc = cons6*gamma(7.+mu_c(i,k))*tmp1*dum**2
+   !         N_nuc = cons5*gamma(mu_c(i,k)+4.)*tmp1*dum
+!! JM_20260629 >> adding immersion freezing of schneider et al. as in SB
+            !  tmpdbl1  = dexp(dble(aimm*(trplpt-t(i,k))))
+            !  tmpdbl2  = dble(dum)
+            !  Q_nuc = cons6*cdist1(i,k)*gamma(7.+mu_c(i,k))*tmpdbl1*tmpdbl2**2
+            !  N_nuc = cons5*cdist1(i,k)*gamma(mu_c(i,k)+4.)*tmpdbl1*tmpdbl2
 
+            !  if (nCat>1) then
+            !    !determine destination ice-phase category:
+            !    dum1  = 900.     !density of new ice
+            !    D_new = ((Q_nuc*6.)/(pi*dum1*N_nuc))**thrd
+            !    call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,      &
+            !                            deltaD_init,iice_dest)
 
-             if (nCat>1) then
-               !determine destination ice-phase category:
-                dum1  = 900.     !density of new ice
-                D_new = ((Q_nuc*6.)/(pi*dum1*N_nuc))**thrd
-                call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,      &
-                                        deltaD_init,iice_dest)
+            !    if (global_status /= STATUS_OK) return
+            !  else
+            !    iice_dest = 1
+            !  endif
+            !  qcheti(iice_dest) = Q_nuc
+            !  ncheti(iice_dest) = N_nuc
 
-                if (global_status /= STATUS_OK) return
+             temp = max(t(i,k),237.15)
+             if (temp .le. 265.0) then
+               N_nuc = 0.1*exp(a1*t(i,kbot)+a2)*exp(b1*temp+b2) ! in 1/(stdL) of Schneider et al. (2021)
              else
-                iice_dest = 1
+               N_nuc = 0.0
              endif
-             qcheti(iice_dest) = Q_nuc
-             ncheti(iice_dest) = N_nuc
+             
+             N_nuc = N_nuc * 1e3 / 1.2946 ! convert 1/(stdL) of Schneider et al. (2021) to 1/kg; C[kg-1] = C[stdL-1] * rho_air / rho_stdL * 1e3 [L m-3] * 1/rho_air
+             N_nuc = max(N_nuc - n_inact(i,k), 0.0)
+             Q_nuc = min(N_nuc*qi_min, qc(i,k)*iSCF(i,k))
+             N_nuc = Q_nuc / qi_min
+             n_inact(i,k) = n_inact(i,k) + N_nuc ! depletion of INP due to immersion freezing
+             
+             Q_nuc = Q_nuc * i_dt ! convert instantaneous rate to tendency as qcheti is multiplied by dt later in the code
+             N_nuc = N_nuc * i_dt
+             
+             if (Q_nuc.gt.qsmall .and. N_nuc.gt.nsmall) then
+               if (nCat>1) then
+                  !determine destination ice-phase category:
+                  dum1  = 900.     !density of new ice
+                  D_new = ((Q_nuc*6.)/(pi*dum1*N_nuc))**thrd
+                  call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,      &
+                                          deltaD_init,iice_dest)
+
+                  if (global_status /= STATUS_OK) return
+               else
+                  iice_dest = 1
+               endif
+               qcheti(iice_dest) = Q_nuc
+               ncheti(iice_dest) = N_nuc
+             endif
+!! << JM_20260629
           endif
 
    !............................................................
@@ -3560,6 +3755,100 @@ call cpu_time(timer_start(3))
              endif
              qrheti(iice_dest) = Q_nuc
              nrheti(iice_dest) = N_nuc
+
+!! JM_20260427 >> adding Sullivan FFD parameterization
+            ! !--- SULLIVAN FFD parameterization ---!
+            !  if (nCat>1) then
+            !     !determine destination ice-phase category
+            !     D_new = 10.e-6 !assumes ice crystals from FFD are tiny
+            !     call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest_ffd)
+            !     if (global_status /= STATUS_OK) return
+            !  else
+            !     iice_dest_ffd = 1
+            !  endif
+
+            !  p_DS = p_max * EXP(-((t(i,k) - norm_temp)/(2.0**0.5*norm_sigma))**2.0)
+            !  N_DS = MAX(p_DS * eta_DS, 0.0)
+            !  dum1 = MAX(N_nuc * N_DS, 0.0)
+            !  dum2 = dum1 * piov6 * 900. * D_new**3 ! mass of new ice from FFD
+            !  qrheti(iice_dest) = qrheti(iice_dest) - dum2
+            !  if (qrheti(iice_dest) .lt. 0.0 ) then
+            !    dum2 = qrheti(iice_dest) + dum2
+            !    qrheti(iice_dest) = 0.0
+            !    nrheti(iice_dest) = 0.0
+            !  endif
+            !  qimul_ffd_imm(iice_dest_ffd) = qimul_ffd_imm(iice_dest_ffd) + dum2
+            !  nimul_ffd_imm(iice_dest_ffd) = nimul_ffd_imm(iice_dest_ffd) + dum1
+            ! !--- SULLIVAN FFD parameterization ---!
+!! << JM_20260427
+
+!! JM_20260602 >> adding Phillips FFD parameterisation
+            ! !--- PHILLIPS FFD parameterization ---!
+
+            ! !-- calculate mean rain drop diameter (based on rain DSD)
+            
+            ! !
+            ! ! JM note: Should I use qr and nr here in get_rain_dsd2 or use Q_nuc and N_nuc?
+            ! !
+
+            !  call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+            !  d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
+            !  ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
+
+            !  !-- calculate mean rain drop mass
+            !  m_rain = piov6 * 1000 * d_rain**3 ! mass of mean rain drop for FFD, assuming density of 1000 kg/m3
+
+            ! !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
+            ! !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
+            !  call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
+             
+            !  !-- number of fragments from FFD 
+            !  dum1_small = ns_frag * N_nuc                     ! total number of small fragments from FFD
+            !  dum1_big   = nb_frag * N_nuc                     ! total number of big fragments from FFD
+ 
+            !  !-- mass of fragments from FFD
+            !  dum2_small = dum1_small * piov6 * 900 * D_new**3 ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
+            !  dum2_big   = dum1_big * 1./2. * m_rain           ! assumes big fragments have mass equal to half of the mean rain drop mass
+
+            !  !-- small fragments from FFD
+            !  if (nCat>1) then
+            !     !determine destination ice-phase category
+            !     D_small = 10.e-6 ! assumes ice crystals from FFD are tiny
+            !     call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
+            !     if (global_status /= STATUS_OK) return
+            !  else
+            !     iice_dest_ffd = 1
+            !  endif
+             
+            !  qrheti(iice_dest) = qrheti(iice_dest) - dum2_small
+            !  if (qrheti(iice_dest) .lt. 0.0 ) then
+            !    dum2_small = qrheti(iice_dest) + dum2_small
+            !    qrheti(iice_dest) = 0.0
+            !    nrheti(iice_dest) = 0.0
+            !  endif
+            !  qimul_ffd_imm(iice_dest_ffd) = qimul_ffd_imm(iice_dest_ffd) + dum2_small
+            !  nimul_ffd_imm(iice_dest_ffd) = nimul_ffd_imm(iice_dest_ffd) + dum1_small
+
+            !  !-- big fragments from FFD
+            !  if (nCat>1) then
+            !     !determine destination ice-phase category
+            !     D_big = (( (1./2.*m_rain)*6.)/(920*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2*m_rain
+            !     call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
+            !     if (global_status /= STATUS_OK) return
+            !  else
+            !     iice_dest_ffd = 1
+            !  endif
+
+            !  qrheti(iice_dest) = qrheti(iice_dest) - dum2_big
+            !  if (qrheti(iice_dest) .lt. 0.0 ) then
+            !    dum2_big = qrheti(iice_dest) + dum2_big
+            !    qrheti(iice_dest) = 0.0
+            !    nrheti(iice_dest) = 0.0
+            !  endif
+            !  qimul_ffd_imm(iice_dest_ffd) = qimul_ffd_imm(iice_dest_ffd) + dum2_big
+            !  nimul_ffd_imm(iice_dest_ffd) = nimul_ffd_imm(iice_dest_ffd) + dum1_big
+            !  !--- PHILLIPS FFD parameterization ---!
+!! << JM_20260602
           endif
 
 
@@ -3571,29 +3860,29 @@ call cpu_time(timer_start(3))
    ! accreted rain contributes to splintering, but accreted cloud water does not.
    ! It only occurs in the temperature range of -8C < T -3C.
 
-          if (nCat.eq.1) then
-          !for nCat = 1, rime-splinter is shut off during the summer (dilution of rimed ice sizes
-          !weakens convection) but on during the winter.  The temperature threshold of +9 C (282 K)
-          !is used as a proxy for winter/summer
-             log_hmossopOn = t(i,kbot).lt.282.
-             Dmin_HM       = 250.e-6
-             Dinit_HM      =  10.e-6
-          else
-             log_hmossopOn = .true.
-             Dmin_HM       = 1000.e-6
-             Dinit_HM      =   10.e-6
-          endif
+         if (nCat.eq.1) then
+         !for nCat = 1, rime-splinter is shut off during the summer (dilution of rimed ice sizes
+         !weakens convection) but on during the winter.  The temperature threshold of +9 C (282 K)
+         !is used as a proxy for winter/summer
+            log_hmossopOn = t(i,kbot).lt.282.
+            Dmin_HM       = 250.e-6
+            Dinit_HM      =  10.e-6
+         else
+            log_hmossopOn = .true.
+            Dmin_HM       = 1000.e-6
+            Dinit_HM      =   10.e-6
+         endif
 
-          calc_HM:  if (log_hmossopOn .and. t(i,k).gt.265.15 .and. t(i,k).lt.270.15) then
+         calc_HM:  if (log_hmossopOn .and. t(i,k).gt.265.15 .and. t(i,k).lt.270.15) then
 
              if (nCat>1) then
-                !determine destination ice-phase category
-                D_new = 10.e-6 !assumes ice crystals from rime splintering are tiny
-                call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,      &
-                                        deltaD_init,iice_dest)
-                if (global_status /= STATUS_OK) return
+               !determine destination ice-phase category
+               D_new = 10.e-6 !assumes ice crystals from rime splintering are tiny
+               call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,      &
+                                       deltaD_init,iice_dest)
+               if (global_status /= STATUS_OK) return
              else
-                iice_dest = 1
+               iice_dest = 1
              endif
 
              iice_loop_HM:  do iice = 1,nCat
@@ -3648,63 +3937,194 @@ call cpu_time(timer_start(3))
 
           endif calc_HM
 
-!! JM_20260408 << adding FFD from lachapelle
-          calc_FFD:  if  ((qrcol(iice).gt.qsmall) .and. (t(i,k).gt.248.15) &
-                .and. (t(i,k).lt.270.15) .and. (diam_ice(i,k,iice).lt.1000.e-6)  ) then ! Fragmentation of freezing drops, as implemented in (lachapelle et al. 2025)
-!! JM_20260408 << adding D_new and destination category for FFD and ice loop as this was not part of the original implementation
-               if (nCat>1) then
-                  !determine destination ice-phase category
-                  D_new = 10.e-6 !assumes ice crystals from FFD are tiny
-                  call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest)
-                  if (global_status /= STATUS_OK) return
-               else
-                  iice_dest = 1
-               endif
+!! JM_20260408 << adding FFD parameterizations
+         ! !--- Qu FFD parameterization: as implemented in (lachapelle et al. 2025) ---!
+         ! iice_loop_FFD_Qu:  do iice = 1,nCat
+         !     calc_FFD_Qu:  if  ((qrcol(iice).gt.qsmall) .and. (t(i,k).gt.248.15) &
+         !                   .and. (t(i,k).lt.270.15) .and. (diam_ice(i,k,iice).lt.1000.e-6)) then
+         !          if (nCat>1) then
+         !             !determine destination ice-phase category
+         !             D_new = 10.e-6 !assumes ice crystals from FFD are tiny
+         !             call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest_ffd)
+         !             if (global_status /= STATUS_OK) return
+         !          else
+         !             iice_dest_ffd = 1
+         !          endif
 
-               iice_loop_FFD:  do iice = 1,nCat
-!! << JM_20260408
-                  ! get rain DSD parameters for rimed rain mass, i.e. lambda and n0r
-                  dum1_sip = qrcol(iice)
-                  dum2_sip = nrcol(iice)
-                  call get_rain_dsd2(dum1_sip,dum2_sip,mu_rcol,lamrcol,cdistrcol,logn0rcol,1.)
+         !          ! get rain DSD parameters for rimed rain mass, i.e. lambda and n0r
+         !          dum1_sip = qrcol(iice)
+         !          dum2_sip = nrcol(iice)
+         !          call get_rain_dsd2(dum1_sip,dum2_sip,mu_rcol,lamrcol,cdistrcol,logn0rcol,1.)
 
-                  ! temperature dependent scaling factor for FDD
-                  if (t(i,k).gt.267.15) then
-                     dum3_sip = (270.15-t(i,k))*(1./3.)
-                  else
-                     dum3_sip = 1.
-                  endif
+         !          ! temperature dependent scaling factor for FDD
+         !          if (t(i,k).gt.267.15) then
+         !             dum3_sip = (270.15-t(i,k))*(1./3.)
+         !          else
+         !             dum3_sip = 1.
+         !          endif
 
-                  ! only consider rain drops with 100 micron < D < 3.5mm for FFD
-                  d_ffd_thr = 3500.e-6
-                  dum4_sip = lamrcol* 100.e-6
-                  dum5_sip = lamrcol* d_ffd_thr
+         !          ! only consider rain drops with 100 micron < D < 3.5mm for FFD
+         !          d_ffd_thr = 3500.e-6
+         !          dum4_sip = lamrcol* 100.e-6
+         !          dum5_sip = lamrcol* d_ffd_thr
 
-                  ! calculate the number of splinters for raindrops between 100 micron and 3.5mm using the parameterization of
-                  ! Lawson et al (2015): N_splinters = 2.5 x 10^11 D_mm^4
-                  dum6_sip = dum3_sip*2.5e-11*(1.e24)/(lamrcol**5)*(10**logn0rcol) &
-                     * (exp(-dum4_sip)*((dum4_sip)**4+4.*(dum4_sip)**3+12.*(dum4_sip)**2+24.*(dum4_sip)+24.) &
-                        -exp(-dum5_sip)*((dum5_sip)**4+4.*(dum5_sip)**3+12.*(dum5_sip)**2+24.*(dum5_sip)+24.) )
+         !          ! calculate the number of splinters for raindrops between 100 micron and 3.5mm using the parameterization of
+         !          ! Lawson et al (2015): N_splinters = 2.5 x 10^11 D_mm^4
+         !          dum6_sip = dum3_sip*2.5e-11*(1.e24)/(lamrcol**5)*(10**logn0rcol) &
+         !             * (exp(-dum4_sip)*((dum4_sip)**4+4.*(dum4_sip)**3+12.*(dum4_sip)**2+24.*(dum4_sip)+24.) &
+         !                -exp(-dum5_sip)*((dum5_sip)**4+4.*(dum5_sip)**3+12.*(dum5_sip)**2+24.*(dum5_sip)+24.) )
 
-                  ! adding contribution from drops larger than 3.5mm (assuming one splinter per drop)
-                  dum6_sip = dum6_sip +  (10**logn0rcol)*( exp(-lamrcol*d_ffd_thr) )/lamrcol
+         !          ! adding contribution from drops larger than 3.5mm (assuming one splinter per drop)
+         !          dum6_sip = dum6_sip +  (10**logn0rcol)*( exp(-lamrcol*d_ffd_thr) )/lamrcol
 
-                  ! subtract splintering from rime mass transfer
-                  qrcol(iice) = qrcol(iice) - dum6_sip * (piov6*900.*(D_new)**3)
-                  if (qrcol(iice) .lt. 0. ) then
-                     dum6_sip    = dum6_sip+qrcol(iice)/(piov6*900.*(D_new)**3)
-                     qrcol(iice) = 0.
-                  endif
+         !          ! subtract splintering from rime mass transfer
+         !          qrcol(iice) = qrcol(iice) - dum6_sip * (piov6*900.*(D_new)**3)
+         !          if (qrcol(iice) .lt. 0. ) then
+         !             dum6_sip    = dum6_sip+qrcol(iice)/(piov6*900.*(D_new)**3)
+         !             qrcol(iice) = 0.
+         !          endif
 
-                  ! add contribution from FFD
-                  nimul(iice_dest) = nimul(iice_dest) + dum6_sip
-                  qrmul(iice_dest) = qrmul(iice_dest) + dum6_sip * (piov6*900.*(D_new)**3)
-               enddo iice_loop_FFD
+         !          ! add contribution from FFD
+         !          nimul(iice_dest_ffd) = nimul(iice_dest_ffd) + dum6_sip
+         !          qrmul(iice_dest_ffd) = qrmul(iice_dest_ffd) + dum6_sip * (piov6*900.*(D_new)**3)
+         !     endif calc_FFD_Qu
+         ! enddo iice_loop_FFD_Qu
 
-!! JM_20260408 >> adding philips FFD parameterization
-               ! Adding philips?
-!! JM_20260408
-          endif calc_FFD
+         ! !--- Phillips FFD parameterization ---!
+         ! qr_present: if (qr(i,k)*iSPF(i,k).ge.qsmall) then
+         !    !-- calculate mean rain drop diameter (based on rain DSD)
+         !    call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+         !    d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
+         !    ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
+
+         !    !-- calculate mean rain drop mass
+         !    m_rain = piov6 * 1000 * d_rain**3   ! rhow = 1000 kg/m3
+
+         !    !-- calculate mean rain drop fallspeed
+         !    call get_rain_fallspeed(qr(i,k),nr(i,k),iSPF(i,k),rhofacr(i,k),v_qrain)
+
+         !    iice_loop_FFD_Phil:  do iice = 1,nCat
+         !       calc_FFD_Phil:  if  ((qrcol(iice).gt.qsmall) .and. (qitot(i,k,iice).ge.qsmall) .and. (qirim(i,k,iice).ge.qsmall) &
+         !                            .and. (t(i,k).gt.235.15) .and. (t(i,k).lt.273.15) &
+         !                            .and. (diam_ice(i,k,iice).lt.1000.e-6)) then
+
+         !          !-- calculate mean mass of ice
+         !          m_ice = qitot(i,k,iice)/(nitot(i,k,iice)+1e-20)
+
+         !          ffd_mode1and2: if (m_rain .gt. m_ice) then
+         !             ! Mode 1:
+         !             call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
+
+         !             !-- small fragments from FFD
+         !             if (nCat>1) then
+         !                !determine destination ice-phase category
+         !                D_small = 10.e-6 ! assumes ice crystals from FFD are tiny
+         !                call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
+         !                if (global_status /= STATUS_OK) return
+         !             else
+         !                iice_dest_ffd = 1
+         !             endif
+                     
+         !             !-- number and mass of small fragments from FFD
+         !             dum1_small = E_freeze * nrcol(iice) * ns_frag      ! total number of small fragments from FFD
+         !             dum2_small = dum1_small * piov6 * 900 * D_small**3   ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
+                     
+         !             qrcol(iice) = qrcol(iice) - dum2_small
+         !             if (qrcol(iice) .lt. 0.0 ) then
+         !                dum2_small = qrcol(iice) + dum2_small
+         !                qrcol(iice) = 0.0
+         !                nrcol(iice) = 0.0
+         !             endif
+         !             qimul_ffd_rim(iice_dest_ffd) = qimul_ffd_rim(iice_dest_ffd) + dum2_small
+         !             nimul_ffd_rim(iice_dest_ffd) = nimul_ffd_rim(iice_dest_ffd) + dum1_small
+
+         !             !-- big fragments from FFD
+         !             if (nCat>1) then
+         !                !determine destination ice-phase category
+         !                D_big = (( (1./2.*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2*m_rain
+         !                call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
+         !                if (global_status /= STATUS_OK) return
+         !             else
+         !                iice_dest_ffd = 1
+         !             endif
+
+         !             !-- number and mass of big fragments from FFD 
+         !             dum1_big   = E_freeze * nrcol(iice) * nb_frag      ! total number of big fragments from FFD
+         !             dum2_big   = dum1_big * 1./2. * m_rain             ! assumes big fragments have mass equal to 1/2 of the mean rain drop mass
+
+         !             qrcol(iice) = qrcol(iice) - dum2_big
+         !             if (qrcol(iice) .lt. 0.0 ) then
+         !                dum2_big = qrcol(iice) + dum2_big
+         !                qrcol(iice) = 0.0
+         !                nrcol(iice) = 0.0
+         !             endif
+         !             qimul_ffd_rim(iice_dest_ffd) = qimul_ffd_rim(iice_dest_ffd) + dum2_big
+         !             nimul_ffd_rim(iice_dest_ffd) = nimul_ffd_rim(iice_dest_ffd) + dum1_big
+
+         !          elseif (m_rain .lt. m_ice) then
+         !             if (log_3momentIce .AND. log_LiquidFrac) then
+         !                call get_ice_fallspeed_TT(qitot(i,k,iice), qirim(i,k,iice), qiliq(i,k,iice), nitot(i,k,iice), birim(i,k,iice), zitot(i,k,iice), rhofaci(i,k), v_qice)
+         !             else if (.NOT.log_3momentIce .AND. log_LiquidFrac) then
+         !                call get_ice_fallspeed_FT(qitot(i,k,iice), qirim(i,k,iice), qiliq(i,k,iice), nitot(i,k,iice), birim(i,k,iice), rhofaci(i,k), v_qice)
+         !             else
+         !                stop "ERROR: define other fallspeed"
+         !             endif
+                     
+         !             ! Mode 2:
+         !             !
+         !             ! JM note: I think d_rain, m_rain, v_qrain should be calculated based on qrcol and nrcol and NOT on qr and nr
+         !             !          because the formula of Phillips [Eq. (7)] is based on the actually colliding rain drops and not on
+         !             !          the total rain drops in the grid cell.
+         !             !  
+         !             ! Total number of splashes per event. One raindrop will release N_splashes
+         !             N_splashes =  delN_drop_splash_mode2(t(i,k), d_rain, m_rain, m_ice, v_qrain, v_qice)
+
+         !             ! Number of ice and cloud liquid fragments of all collisions
+         !             !       - phi of all splashes will freeze into ice crysals
+         !             !       - (1-phi) of all splashes will be cloud liquid
+         !             dum1_ice = phi * N_splashes * nrcol(iice)
+         !             dum1_cld = (1.0 - phi) * N_splashes * nrcol(iice)
+                                    
+         !             ! Mass of all ice and cloud liquid fragments
+         !             !   - Phillips assumes 0.001*m_rain as ice particle mass
+         !             !   - the mass of cloud liquid is assumed to be the SB minimum mean value
+         !             dum2_ice = 0.001 * m_rain * dum1_ice
+         !             dum2_cld = qc_min * dum1_cld
+
+         !             !-- small ice fragments from FFD
+         !             if (nCat>1) then
+         !                !determine destination ice-phase category
+         !                D_small = (( (0.001*m_rain)*6.)/(900*pi))**thrd ! assumes ice crystals from FFD are round and have 0.001*m_rain of the mass
+         !                call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
+         !                if (global_status /= STATUS_OK) return
+         !             else
+         !                iice_dest_ffd = 1
+         !             endif
+                     
+         !             qrcol(iice) = qrcol(iice) - dum2_ice
+         !             if (qrcol(iice) .lt. 0.0 ) then
+         !                dum2_ice = qrcol(iice) + dum2_ice
+         !                qrcol(iice) = 0.0
+         !                nrcol(iice) = 0.0
+         !             endif
+         !             qimul_ffd_rim(iice_dest_ffd) = qimul_ffd_rim(iice_dest_ffd) + dum2_ice
+         !             nimul_ffd_rim(iice_dest_ffd) = nimul_ffd_rim(iice_dest_ffd) + dum1_ice
+
+         !             !-- cloud droplets from FFD
+         !             qrcol(iice) = qrcol(iice) - dum2_cld
+         !             if (qrcol(iice) .lt. 0.0 ) then
+         !                dum2_cld = qrcol(iice) + dum2_cld
+         !                qrcol(iice) = 0.0
+         !                nrcol(iice) = 0.0
+         !             endif
+         !             qcmul_ffd_rim(iice) = qcmul_ffd_rim(iice) + dum2_cld
+         !             ncmul_ffd_rim(iice) = ncmul_ffd_rim(iice) + dum1_cld
+
+         !             endif ffd_mode1and2
+         !       endif calc_FFD_Phil
+         !    enddo iice_loop_FFD_Phil
+         ! endif qr_present
+         ! !--- Phillips FFD parameterization ---!
 !! << JM_20260408
    !....................................................
    ! condensation/evaporation and deposition/sublimation
@@ -4018,35 +4438,67 @@ call cpu_time(timer_start(3))
           endif
 
 !.....................................
-!! JM_20260407 >> adding modification of lachapelle: contact freezing with other ice crystals
-         !Contact freezing with other ice crystals (lachapelle et al. 2024)
-          if ( (t(i,k).lt.273.15) .and. (sum(qrcol).ge.qsmall) ) then
+!! JM_20260407 >> adding contact freezing with other ice crystals from lachapelle:
+!           ! Contact freezing with other ice crystals (lachapelle et al. 2024)
+!           if ( (t(i,k).lt.273.15) .and. (sum(qrcol).ge.qsmall) ) then
 
-            do iice = 1,nCat
-               ! call get_rain_dsd2(dum1,dum2,mu_rcol,lamrcol,cdistrcol,logn0rcol,1.)
-               if ((nrcol(iice).gt.nsmall) .and. (qrcol(iice).gt.qsmall)) then
-                  diam_col = (( (qrcol(iice) )*6.)/(nrcol(iice)*rho_rimeMax*pi))**thrd
-               else
-                  diam_col = 0.
-               endif
-               if ( (diam_ice(i,k,iice)*2. .le. diam_col) .and. (qitot(i,k,iice).gt.qsmall) ) then  !ML
-                  call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:), diam_col,&        ! JM: changing iSCF(k) --> iSCF(i,k)
-                                          deltaD_init,iice_dest)
-                  if (iice_dest .ne. iice) then
-         
-                     nrcol(iice_dest)   = nrcol(iice_dest) + nrcol(iice)
-                     qrcol(iice_dest)   = qrcol(iice_dest) + qrcol(iice)
+!             do iice = 1,nCat
+!                ! call get_rain_dsd2(dum1,dum2,mu_rcol,lamrcol,cdistrcol,logn0rcol,1.)
+!                if ((nrcol(iice).gt.nsmall) .and. (qrcol(iice).gt.qsmall)) then
+!                   diam_col = (( (qrcol(iice) )*6.)/(nrcol(iice)*rho_rimeMax*pi))**thrd
+!                else
+!                   diam_col = 0.
+!                endif
 
-                     nrhetic(iice_dest) = nrhetic(iice_dest) + nrcol(iice)
-                     nrhetic(iice)      = nrhetic(iice)      - nrcol(iice)
+!                if ( (diam_ice(i,k,iice)*2. .le. diam_col) .and. (qitot(i,k,iice).gt.qsmall) ) then  !ML
+!                   call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),diam_col,&         ! JM: changing iSCF(k) --> iSCF(i,k)
+!                                           deltaD_init,iice_dest)
+!                   if (iice_dest < 1 .or. iice_dest > nCat) then
+!                      WRITE(0,*) "ERROR: iice_dest out of bounds:", iice_dest, "nCat=", nCat
+!                   endif
+!                   if (global_status /= STATUS_OK) return
 
-                     nrcol(iice)        = 0.
-                     qrcol(iice)        = 0.
-         
-                  endif
-               endif
-            enddo
-          endif
+!                   if (iice_dest .ne. iice) then
+!                      ! move mass and number from iice to iice_dest
+!                      nrcol(iice_dest)   = nrcol(iice_dest) + nrcol(iice)
+!                      qrcol(iice_dest)   = qrcol(iice_dest) + qrcol(iice)
+
+!                      ! contact freezing diagnostics
+!                      nrhetc(iice_dest) = nrhetc(iice_dest) + nrcol(iice)
+!                      nrhetc(iice)      = nrhetc(iice)      - nrcol(iice)
+!                      qrhetc(iice_dest) = qrhetc(iice_dest) + qrcol(iice)
+!                      qrhetc(iice)      = qrhetc(iice)      - qrcol(iice)
+
+! !! JM_20260427 >> adding Sullivan FFD parameterization
+!                      ! if (nCat>1) then
+!                      !    !determine destination ice-phase category
+!                      !    D_new = 10.e-6 !assumes ice crystals from FFD are tiny
+!                      !    call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest_ffd)
+!                      !    if (global_status /= STATUS_OK) return
+!                      ! else
+!                      !    iice_dest_ffd = 1
+!                      ! endif
+
+!                      ! p_DS = p_max * EXP(-((t(i,k) - norm_temp)/(2.0**0.5*norm_sigma))**2.0)
+!                      ! N_DS = MAX(p_DS * eta_DS, 0.0)
+!                      ! dum1 = MAX(nrcol(iice) * N_DS, 0.0)
+!                      ! dum2 = dum1 * piov6 * 900. * D_new**3
+!                      ! qrcol(iice_dest) = qrcol(iice_dest) - dum2
+!                      ! if (qrcol(iice_dest) .lt. 0.0) then
+!                      !    dum2 = qrcol(iice_dest) + dum2
+!                      !    qrcol(iice_dest) = 0.0
+!                      !    nrcol(iice_dest) = 0.0 
+!                      ! endif
+!                      ! qrmul_cf(iice_dest_ffd) = qrmul_cf(iice_dest_ffd) + dum2
+!                      ! nimul_cf(iice_dest_ffd) = nimul_cf(iice_dest_ffd) + dum1
+! !! << JM_20260427
+!                      ! remove mass and number from iice (since they are now in iice_dest)
+!                      nrcol(iice)        = 0.
+!                      qrcol(iice)        = 0.
+!                   endif
+!                endif
+!             enddo
+!           endif
 !! << JM_20260407
        endif growth_decay_processes
 
@@ -4085,7 +4537,7 @@ call cpu_time(timer_start(3))
 ! droplet activation
 
        if (log_predictNc .and. sup_cld.gt.1.e-6) then
-       ! 2-moment cloud: alculate droplet activation explicitly from supersaturation
+       ! 2-moment cloud: calculate droplet activation explicitly from supersaturation
        !   note: also applied at the first time step (number only; mass is already added by sat. adj., below)
           tmp1  = 1./bact**0.5
           sigvl = 0.0761 - 1.55e-4*(t(i,k)-273.15)
@@ -4215,7 +4667,7 @@ call cpu_time(timer_start(3))
 ! cloud
        sinks   = (qcaut+qcacc+sum(qccol)+qcevp+sum(qchetc)+sum(qcheti)+sum(qcshd)+       &
                  sum(qccoll)+sum(qwgrth1c)+sum(qcmul))*dt
-       sources = qc(i,k) + (qccon+qcnuc)*dt
+       sources = qc(i,k) + ((qccon+qcnuc) + sum(qcmul_ffd_rim))*dt ! JM_20260623: adding sum(qcmul_ffd_rim) from Phillips FFD parameterization
        if (sinks.gt.sources .and. sinks.ge.1.e-20) then
           ratio  = sources/sinks
           qcaut  = qcaut*ratio
@@ -4225,6 +4677,10 @@ call cpu_time(timer_start(3))
           qcheti = qcheti*ratio
           qcshd  = qcshd*ratio
           qcmul  = qcmul*ratio
+!! JM_20260623 >> adding qcmuld_ffd_rim from Phillips FFD parameterization
+          qcmul_ffd_rim = qcmul_ffd_rim*ratio
+          ncmul_ffd_rim = ncmul_ffd_rim*ratio
+!! << JM_20260623
           qwgrth1c = qwgrth1c*ratio
           qccoll = qccoll*ratio
          !qchetc = qchetc*ratio !currently not used
@@ -4238,6 +4694,9 @@ call cpu_time(timer_start(3))
 
 ! rain
        sinks   = (qrevp+sum(qrcol)+sum(qrhetc)+sum(qrheti)+sum(qrmul)+sum(qrcoll)+       &
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                 sum(qimul_ffd_frz)+sum(qimul_ffd_imm)+sum(qimul_ffd_rim)+ &
+!! << JM_20260619
                  sum(qwgrth1r))*dt
        sources = qr(i,k) + (qrcon+qcaut+qcacc+sum(qrmlt)+sum(qcshd)+sum(qlshd))*dt
        if (sinks.gt.sources .and. sinks.ge.1.e-20) then
@@ -4245,7 +4704,15 @@ call cpu_time(timer_start(3))
           qrevp  = qrevp*ratio
           qrcol  = qrcol*ratio
           qrheti = qrheti*ratio
-          qrmul  = qrmul*ratio
+          qrmul  = qrmul*ratio ! JM note: is there a reason why nimul is not scaled?
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+          qimul_ffd_frz = qimul_ffd_frz*ratio
+          qimul_ffd_imm = qimul_ffd_imm*ratio
+          qimul_ffd_rim = qimul_ffd_rim*ratio
+          nimul_ffd_frz = nimul_ffd_frz*ratio
+          nimul_ffd_imm = nimul_ffd_imm*ratio
+          nimul_ffd_rim = nimul_ffd_rim*ratio
+!! << JM_20260619
           qrcoll = qrcoll*ratio
           qwgrth1r = qwgrth1r*ratio
          !qrhetc = qrhetc*ratio !currently not used
@@ -4253,8 +4720,10 @@ call cpu_time(timer_start(3))
           nrcol  = nrcol*ratio
           nrheti = nrheti*ratio
           nrcoll = nrcoll*ratio
-         !qrhetc = qrhetc*ratio
-         !nrhetc = nrhetc*ratio
+!! JM_20260601 >> uncommenting contact freezing with ice crystals from lachapelle et al. (2024)
+         !  qrhetc = qrhetc*ratio
+         !  nrhetc = nrhetc*ratio
+!! << JM_20260601
        endif
 
 ! ice
@@ -4262,6 +4731,9 @@ call cpu_time(timer_start(3))
           sinks   = (qisub(iice)+qrmlt(iice)+qlevp(iice)+qlshd(iice))*dt
           sources = qitot(i,k,iice) + (qidep(iice)+qinuc(iice)+qrcol(iice)+qccol(iice)+  &
                     qrhetc(iice)+qrheti(iice)+qchetc(iice)+qcheti(iice)+qrmul(iice)+     &
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                    qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+         &
+!! << JM_20260619
                     qcmul(iice)+qrcoll(iice)+qccoll(iice)+qlcon(iice)+qwgrth1c(iice)+    &
                     qwgrth1r(iice))*dt
           do catcoll = 1,nCat
@@ -4340,13 +4812,13 @@ call cpu_time(timer_start(3))
 !! JM_20260330 >> add diagnostic for qcnuc, ncnuc, qccon, qrcon, qcevp, qrevp and nrevp here since these are the final values after
 !!                  - saturation adjustment limiting
 !!                  - vapor conservation limiting
-       diag_3d(i,k,3)  = diag_3d(i,k,3) + qcnuc
-       diag_3d(i,k,5)  = diag_3d(i,k,4) + qccon
-       diag_3d(i,k,6)  = diag_3d(i,k,5) + qrcon
-       diag_3d(i,k,7)  = diag_3d(i,k,6) + qcevp
-       diag_3d(i,k,8)  = diag_3d(i,k,7) + qrevp
-       diag_3d(i,k,10) = diag_3d(i,k,8) + qcacc
-       diag_3d(i,k,12) = diag_3d(i,k,9) + qcaut
+       diag_3d(i,k,3) = diag_3d(i,k,3) + qcnuc
+       diag_3d(i,k,4) = diag_3d(i,k,4) + qccon
+       diag_3d(i,k,5) = diag_3d(i,k,5) + qrcon
+       diag_3d(i,k,6) = diag_3d(i,k,6) + qcevp
+       diag_3d(i,k,7) = diag_3d(i,k,7) + qrevp
+       diag_3d(i,k,8) = diag_3d(i,k,8) + qcacc
+       diag_3d(i,k,9) = diag_3d(i,k,9) + qcaut
  !! << JM_20260330
  !! JM_20260407 >> add diagnostic for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
        if (present(ice_diag_2mom)) then
@@ -4377,9 +4849,18 @@ call cpu_time(timer_start(3))
              ice_diag_2mom(i,k,iice,23) = ice_diag_2mom(i,k,iice,23) + ncheti(iice)
              ice_diag_2mom(i,k,iice,24) = ice_diag_2mom(i,k,iice,24) + nrhetc(iice)
              ice_diag_2mom(i,k,iice,25) = ice_diag_2mom(i,k,iice,25) + nrheti(iice)
-             ice_diag_2mom(i,k,iice,26) = ice_diag_2mom(i,k,iice,26) + nrhetic(iice)
-             ice_diag_2mom(i,k,iice,27) = ice_diag_2mom(i,k,iice,27) + nrshdr(iice)
-             ice_diag_2mom(i,k,iice,28) = ice_diag_2mom(i,k,iice,28) + ncshdc(iice)
+             ice_diag_2mom(i,k,iice,26) = ice_diag_2mom(i,k,iice,26) + nrshdr(iice)
+             ice_diag_2mom(i,k,iice,27) = ice_diag_2mom(i,k,iice,27) + ncshdc(iice)
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+             ice_diag_2mom(i,k,iice,28) = ice_diag_2mom(i,k,iice,28) + qimul_ffd_frz(iice)
+             ice_diag_2mom(i,k,iice,29) = ice_diag_2mom(i,k,iice,29) + nimul_ffd_frz(iice)
+             ice_diag_2mom(i,k,iice,30) = ice_diag_2mom(i,k,iice,30) + qimul_ffd_imm(iice)
+             ice_diag_2mom(i,k,iice,31) = ice_diag_2mom(i,k,iice,31) + nimul_ffd_imm(iice)
+             ice_diag_2mom(i,k,iice,32) = ice_diag_2mom(i,k,iice,32) + qimul_ffd_rim(iice)
+             ice_diag_2mom(i,k,iice,33) = ice_diag_2mom(i,k,iice,33) + nimul_ffd_rim(iice)
+             ice_diag_2mom(i,k,iice,34) = ice_diag_2mom(i,k,iice,34) + qcmul_ffd_rim(iice)
+             ice_diag_2mom(i,k,iice,35) = ice_diag_2mom(i,k,iice,35) + ncmul_ffd_rim(iice)
+!! << JM_20260619
           END DO
        endif
        if (present(ice_diag_2mom_coll)) then
@@ -4408,6 +4889,7 @@ call cpu_time(timer_start(3))
                ice_diag_2mom_liqfrac(i,k,iice,12) = ice_diag_2mom_liqfrac(i,k,iice,12) + nlevp(iice)
                ice_diag_2mom_liqfrac(i,k,iice,13) = ice_diag_2mom_liqfrac(i,k,iice,13) + nrcoll(iice)
                ice_diag_2mom_liqfrac(i,k,iice,14) = ice_diag_2mom_liqfrac(i,k,iice,14) + nccoll(iice)
+               ice_diag_2mom_liqfrac(i,k,iice,14) = ice_diag_2mom_liqfrac(i,k,iice,15) + nifrz(iice)
           END DO
        endif
        if (present(ice_diag_3mom)) then
@@ -4459,9 +4941,12 @@ call cpu_time(timer_start(3))
        iice_loop3: do iice = 1,nCat
 
           qc(i,k) = qc(i,k) + (-qchetc(iice)-qcheti(iice)-qccol(iice)-qcshd(iice)-       &
-                    qccoll(iice)-qwgrth1c(iice)-qcmul(iice))*dt
-          nc(i,k) = nc(i,k) + (-nccol(iice)-nchetc(iice)-ncheti(iice)-nccoll(iice))*dt
+                    qccoll(iice)-qwgrth1c(iice)-qcmul(iice)+qcmul_ffd_rim(iice))*dt                         ! JM_20260623: adding qcmul_ffd_rim(iice) from Phillips FFD parameterization
+          nc(i,k) = nc(i,k) + (-nccol(iice)-nchetc(iice)-ncheti(iice)-nccoll(iice)+ncmul_ffd_rim(iice))*dt  ! JM_20260623: adding ncmul_ffd_rim(iice) from Phillips FFD parameterization
           qr(i,k) = qr(i,k) + (-qrcol(iice)+qrmlt(iice)-qrhetc(iice)-qrheti(iice)+       &
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                    -qimul_ffd_frz(iice)-qimul_ffd_imm(iice)-qimul_ffd_rim(iice)+        &
+!! << JM_20260619
                     qcshd(iice)-qrmul(iice)-qrcoll(iice)+qlshd(iice)-qwgrth1r(iice))*dt
 
         ! apply factor to source for rain number from melting of ice, (ad-hoc
@@ -4484,6 +4969,9 @@ call cpu_time(timer_start(3))
          ! endif
 
           tmp1             = (qrcol(iice)+qccol(iice)+qrhetc(iice)+qrheti(iice)+         &
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                            qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
+!! << JM_20260619
                             qchetc(iice)+qcheti(iice)+qrmul(iice)+qcmul(iice))*dt
           qitot(i,k,iice) = qitot(i,k,iice) + (qidep(iice)+qinuc(iice)-qlshd(iice)-      &
                             qlevp(iice)+qlcon(iice)+qwgrth1c(iice)+qwgrth1r(iice)+       &
@@ -4492,12 +4980,18 @@ call cpu_time(timer_start(3))
           birim(i,k,iice) = birim(i,k,iice) + ((qifrz(iice)+qrcol(iice))*                &
                             i_rho_rimeMax+(qccol(iice)+qcmul(iice))/rhorime_c(iice)+     &
                             (qrhetc(iice)+qrheti(iice)+qchetc(iice)+qcheti(iice)+        &
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                            qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
+!! << JM_20260619
                             qrmul(iice))*i_rho_rimeMax)*dt
           qiliq(i,k,iice) = qiliq(i,k,iice) + (qrcoll(iice)+qccoll(iice)-qifrz(iice)-    &
                             qlshd(iice)+qlcon(iice)-qlevp(iice)+qwgrth1c(iice)+          &
                             qwgrth1r(iice))*dt
           nitot(i,k,iice) = nitot(i,k,iice) + (ninuc(iice)-nimlt(iice)-nisub(iice)-      &
                             nislf(iice)+nrhetc(iice)+nrheti(iice)+nchetc(iice)+          &
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                            nimul_ffd_frz(iice)+nimul_ffd_imm(iice)+nimul_ffd_rim(iice)+ &
+!! << JM_20260619
                             ncheti(iice)+nimul(iice)-nlevp(iice))*dt
 
           if (nCat.gt.1) then
@@ -4561,6 +5055,9 @@ call cpu_time(timer_start(3))
           th(i,k) = th(i,k) + i_exn(i,k)*((qidep(iice)-qisub(iice)+qinuc(iice))*         &
                               xxls(i,k)*i_cpv+(qrcol(iice)+qccol(iice)+qchetc(iice)+     &
                               qcheti(iice)+qrhetc(iice)+qrheti(iice)+qcmul(iice)+        &
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                              qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
+!! << JM_20260619
                               qrmul(iice)-qrmlt(iice)-qimlt(iice)+qifrz(iice))*          &
                               xlf(i,k)*i_cpv+(qlcon(iice)-qlevp(iice))*xxlv(i,k)*i_cpv)*dt
 
@@ -4637,18 +5134,30 @@ call cpu_time(timer_start(3))
 ! include all processes **except** group 2 processes which are added later below
 ! thus, all group 2 processes are subtracted from the ice variables below
           dumqi = qitot(i,k,iice) - (qinuc(iice)+qrhetc(iice)+qrheti(iice)+qchetc(iice)+ &
-                                    qcheti(iice)+qrmul(iice)+qcmul(iice))*dt
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                                     qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
+!! << JM_20260619
+                                     qcheti(iice)+qrmul(iice)+qcmul(iice))*dt
           dumql = qiliq(i,k,iice)
 
           if ((dumqi-dumql).ge.qsmall) then
 
              dumni = nitot(i,k,iice) - (ninuc(iice)+nrhetc(iice)+nrheti(iice)+           &
-                                       nchetc(iice)+ncheti(iice)+nimul(iice))*dt
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                                        nimul_ffd_frz(iice)+nimul_ffd_imm(iice)+nimul_ffd_rim(iice)+      &
+!! << JM_20260619
+                                        nchetc(iice)+ncheti(iice)+nimul(iice))*dt
              dumzi = zitot(i,k,iice)
              dumqr = qirim(i,k,iice) - (qrhetc(iice)+qrheti(iice)+qchetc(iice)+          &
-                                       qcheti(iice)+qrmul(iice)+qcmul(iice))*dt
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                                        qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
+!! << JM_20260619
+                                        qcheti(iice)+qrmul(iice)+qcmul(iice))*dt
              dumbi = birim(i,k,iice) - (qrhetc(iice)+qrheti(iice)+qchetc(iice)+          &
-                           qcheti(iice)+qrmul(iice)+qcmul(iice))*i_rho_rimeMax*dt
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+                                        qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
+!! << JM_20260619
+                                        qcheti(iice)+qrmul(iice)+qcmul(iice))*i_rho_rimeMax*dt
 
              dumni = max(dumni,nsmall)
              dumzi = max(dumzi,zsmall)
@@ -4739,13 +5248,13 @@ call cpu_time(timer_start(3))
           call update_zi_proc2(zitot(i,k,iice),tmp2,tmp1,mu_r(i,k),dt)
 
         !proceses of ice multiplication
-          tmp1 = qrmul(iice)                   !qitot tendency
-          tmp2 = nimul(iice)                   !moment_0 tendency
+          tmp1 = qrmul(iice) + qimul_ffd_frz(iice) + qimul_ffd_imm(iice) + qimul_ffd_rim(iice)   !qitot tendency; JM: adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+          tmp2 = nimul(iice) + nimul_ffd_frz(iice) + nimul_ffd_imm(iice) + nimul_ffd_rim(iice)   !moment_0 tendency; JM: adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
           call update_zi_proc2(zitot(i,k,iice),tmp2,tmp1,mu_r(i,k),dt)
 
         !proceses of rime splintering of cloud droplets
           tmp1 = qcmul(iice)                   !qitot tendency
-          tmp2 = nimul(iice)                   !moment_0 tendency
+          tmp2 = nimul(iice)                   !moment_0 tendency; JM note: BUG? nimul is used twice: once for RS-SIP with rain and once with cloud droplets
           call update_zi_proc2(zitot(i,k,iice),tmp2,tmp1,mu_r(i,k),dt)
 
        !====
@@ -5076,19 +5585,20 @@ call cpu_time(timer_end(6))
     do k = kbot,ktop,kdir
      do i = its,ite
           do iice = nCat,2,-1
-!! JM_20260407 << adding modification of lachapelle: new method for determining whether to merge ice categories or not
-             !  tmp1 = abs(diag_di(i,k,iice)-diag_di(i,k,iice-1))
-             !  if (tmp1.le.deltaD_init .and. qitot(i,k,iice).gt.0. .and.                   &
-             !   qitot(i,k,iice-1).gt.0.) then
-             ! Condition for new method (Lachapelle et al. 2024)
-             if ((diag_di(i,k,iice) .eq. 0.) .or. (diag_di(i,k,iice-1) .eq. 0.)) then
-                tmp1 = 10.
-             else
-                tmp1 = max( (diag_di(i,k,iice)/diag_di(i,k,iice-1)), diag_di(i,k,iice-1)/diag_di(i,k,iice) )   
-             endif
-             if (tmp1.le.deltaD_init .and. qitot(i,k,iice)>0. .and. qitot(i,k,iice-1)>0.) then
+!! JM_20260407 << Modification: New method for determining whether to merge ice categories or not
+             tmp1 = abs(diag_di(i,k,iice)-diag_di(i,k,iice-1))
+             if (tmp1.le.deltaD_init .and. qitot(i,k,iice).gt.0. .and.                   &
+              qitot(i,k,iice-1).gt.0.) then
+
+            ! Condition for new method  from Lachapelle et al. 2024
+            !  if ((diag_di(i,k,iice) .eq. 0.) .or. (diag_di(i,k,iice-1) .eq. 0.)) then
+            !     tmp1 = 10.
+            !  else
+            !     tmp1 = max( (diag_di(i,k,iice)/diag_di(i,k,iice-1)), diag_di(i,k,iice-1)/diag_di(i,k,iice) )   
+            !  endif
+            !  if (tmp1.le.deltaD_init .and. qitot(i,k,iice)>0. .and. qitot(i,k,iice-1)>0.) then
 !! << JM_20260407
-		          qitot(i,k,iice-1) = qitot(i,k,iice-1) + qitot(i,k,iice)
+                qitot(i,k,iice-1) = qitot(i,k,iice-1) + qitot(i,k,iice)
                 nitot(i,k,iice-1) = nitot(i,k,iice-1) + nitot(i,k,iice)
                 qirim(i,k,iice-1) = qirim(i,k,iice-1) + qirim(i,k,iice)
                 birim(i,k,iice-1) = birim(i,k,iice-1) + birim(i,k,iice)
@@ -5158,7 +5668,7 @@ call cpu_time(timer_end(6))
     ! rain:
        if (qr(i,k).ge.qsmall) then
 
-          call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,1.)
+          call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k)) !JM note: changed 1. with iSPF(i,k). but does not make any difference fore me as iSPF = 1
 
          ! impose size limits for rain with 'soft' lambda limiter
          ! (adjusts over a set timescale rather than within one timestep)
@@ -5415,14 +5925,15 @@ call cpu_time(timer_start(9))
     do i = its,ite
        do k = ktop,kbot,-kdir
           if (qc(i,k).ge.qsmall) then
-             call get_cloud_dsd2(qc(i,k),nc(i,k),mu_c(i,k),rho(i,k),nu(i,k),dnu,lamc(i,k),  &
-                                 tmp1,tmp2,1.)
-             diag_3d(i,k,1) = (mu_c(i,k)+1.)/lamc(i,k)
+             call get_cloud_dsd2(qc(i,k),nc(i,k),mu_c(i,k),rho(i,k),nu(i,k),dnu,lamc(i,k),tmp1,tmp2,iSPF(i,k))
+             diag_3d(i,k,1) = (mu_c(i,k)+1.)/lamc(i,k)                                        !-- number-weighted mean diameter of cloud droplets
+             !diag_3d(i,k,1) = ((mu_c(i,k)+3)*(mu_c(i,k)+2)*(mu_c(i,k)+1))**(1./3.)/lamc(i,k) !-- volume-weighted mean diameter of cloud droplets
           endif
 
           if (qr(i,k).ge.qsmall) then
-             call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,1.)
-             diag_3d(i,k,2) = (mu_r(i,k)+1.)/lamr(i,k)
+             call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+             diag_3d(i,k,2) = (mu_r(i,k)+1.)/lamr(i,k)                                        !-- number-weighted mean diameter of rain drops
+             !diag_3d(i,k,2) = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
           endif
        enddo
     enddo
@@ -10403,13 +10914,13 @@ else
     do iice = 1,n_cat
        if (Qi(iice) .ge. qsmall_loc) then
           all_empty = .false.
-!! JM_20260407 >> adding modifications from lachapelle: New method for calculating diff (relative difference instead of absolute difference)
-         !diff      = abs(Di(iice)-D_nuc)
-          if ( (Di(iice).eq.0.) .or. (D_nuc.eq.0.) ) then
-                diff  = 10.
-          else
-                diff  = max((D_nuc/Di(iice)), Di(iice)/D_nuc ) !new method (lachapelle et al. 2024)
-          endif
+!! JM_20260407 >> Modifications from lachapelle: New method for calculating diff (relative difference instead of absolute difference)
+         diff      = abs(Di(iice)-D_nuc)
+         !  if ( (Di(iice).eq.0.) .or. (D_nuc.eq.0.) ) then
+         !     diff  = 10.
+         !  else
+         !     diff  = max((D_nuc/Di(iice)), Di(iice)/D_nuc ) !new method (lachapelle et al. 2024)
+         !  endif
 !! << JM_20260407
           if (diff .lt. mindiff) then
              mindiff   = diff
@@ -12660,5 +13171,498 @@ else
 
  end subroutine sedimentation_ice_FF
 !======================================================================================!
+
+!! JM_20260603 >> adding mass-weighted/number-weighted fall speed of rain and ice
+ subroutine get_rain_fallspeed(qr, nr, iSPF, rhofac, v_qr, v_nr)
+   real, intent(inout) :: qr, nr
+   real, intent(in) :: iSPF, rhofac
+   real, intent(out), optional :: v_qr, v_nr
+   
+   ! local variables
+   real :: v_qr_tmp, v_nr_tmp
+   real :: mu_r, lamr, dum
+   real :: dum1, dum2, rdumii, rdumjj, i_dum3
+   integer :: dumii, dumjj
+
+   qr_not_small: if (qr*iSPF.ge.qsmall) then
+      nr  = max(nr,nsmall)
+      call get_rain_dsd2(qr,nr,mu_r,lamr,dum,dum,iSPF)
+      call find_lookupTable_indices_3(dumii,dumjj,dum1,rdumii,rdumjj,i_dum3,   &
+                                      mu_r,lamr)
+      !mass-weighted fall speed:
+      dum1 = vm_table(dumii,dumjj)+(rdumii-real(dumii))*                       &
+            (vm_table(dumii+1,dumjj)-vm_table(dumii,dumjj))     !at mu_r
+      dum2 = vm_table(dumii,dumjj+1)+(rdumii-real(dumii))*                     &
+            (vm_table(dumii+1,dumjj+1)-vm_table(dumii,dumjj+1)) !at mu_r+1
+      v_qr_tmp = dum1 + (rdumjj-real(dumjj))*(dum2-dum1)        !interpolated
+      v_qr_tmp = v_qr_tmp*rhofac                                !corrected for air density
+      ! number-weighted fall speed:
+      dum1 = vn_table(dumii,dumjj)+(rdumii-real(dumii))*                       &
+            (vn_table(dumii+1,dumjj)-vn_table(dumii,dumjj))     !at mu_r
+      dum2 = vn_table(dumii,dumjj+1)+(rdumii-real(dumii))*                     &
+            (vn_table(dumii+1,dumjj+1)-vn_table(dumii,dumjj+1)) !at mu_r+1
+      v_nr_tmp = dum1+(rdumjj-real(dumjj))*(dum2-dum1)          !interpolated
+      v_nr_tmp = v_nr_tmp*rhofac                                !corrected for air density
+   
+      if (present(v_qr)) v_qr = v_qr_tmp
+      if (present(v_nr)) v_nr = v_nr_tmp
+
+   endif qr_not_small
+ end subroutine get_rain_fallspeed
+
+ subroutine get_ice_fallspeed_TT(qitot, qirim, qiliq, nitot, birim, zitot, rhofac, v_qi, v_ni, v_zi)
+   real, intent(in) :: qitot, qirim, qiliq, nitot, birim, zitot
+   real, intent(in) :: rhofac
+   real, intent(out), optional :: v_qi, v_ni, v_zi
+   
+   ! local variables
+   real :: qitot_loc, qirim_loc, qiliq_loc, nitot_loc, birim_loc, zitot_loc
+   real :: v_qi_tmp, v_ni_tmp, v_zi_tmp
+   real :: rhop ! bulk density of ice particle
+   integer :: dumi, dumjj, dumii, dumll, dumzz
+   real :: dum1, dum4, dum5, dum7, mu_i, dum6
+   real :: f1pr01, f1pr02, f1pr16, f1pr19
+   real,    dimension(n_args_r)     :: args_r
+   integer, dimension(n_args_i)     :: args_i
+   
+   qi_not_small: if (qitot.ge.qsmall) then
+      qitot_loc = qitot
+      qirim_loc = qirim
+      qiliq_loc = qiliq
+      nitot_loc = max(nitot,nsmall) !impose lower limits; prevents log(<0)
+      birim_loc = birim
+      zitot_loc = zitot
+      call calc_bulkRhoRime(qitot_loc,qirim_loc,qiliq_loc,birim_loc,rhop)
+
+      call find_lookupTable_indices_1a(dumi,dumjj,dumii,dumll,dum1,dum4, &
+               dum5,dum7,isize,rimsize,liqsize,densize, &
+               qitot_loc,nitot_loc,qirim_loc,qiliq_loc,rhop)
+
+      call get_mui_rhoi(mu_i,f1pr16,dum6,dumzz,qitot_loc, &
+                        nitot_loc,zitot_loc,dum1,dum4,dum5,dum7, &
+                        dumjj,dumii,dumll,dumi,zsize,zqsize)
+
+      call args_for_LUT(args_r,args_i,dum1,dum4,dum5,dum6,dum7,0.,0.,0.,       &
+                        dumzz,dumjj,dumii,dumll,dumi,0)
+
+      f1pr01 = proc_from_LUT_main3mom( 1,args_r,args_i)
+      f1pr02 = proc_from_LUT_main3mom( 2,args_r,args_i)
+      f1pr19 = proc_from_LUT_main3mom(13,args_r,args_i)
+
+      v_qi_tmp = f1pr02*rhofac   !mass-weighted fall speed  (with air density factor)
+      v_ni_tmp = f1pr01*rhofac   !number-weighted fall speed
+      v_zi_tmp = f1pr19*rhofac   !reflectivity-weighted fall speed
+   else
+      v_qi_tmp = 0.0
+      v_ni_tmp = 0.0
+      v_zi_tmp = 0.0
+   endif qi_not_small
+
+   if (present(v_qi)) v_qi = v_qi_tmp
+   if (present(v_ni)) v_ni = v_ni_tmp
+   if (present(v_zi)) v_zi = v_zi_tmp
+ 
+ end subroutine get_ice_fallspeed_TT
+
+ subroutine get_ice_fallspeed_FT(qitot, qirim, qiliq, nitot, birim, rhofac, v_qi, v_ni)
+   real, intent(in) :: qitot, qirim, qiliq, nitot, birim
+   real, intent(in) :: rhofac
+   real, intent(out), optional :: v_qi, v_ni
+   
+   ! local variables
+   real :: qitot_loc, qirim_loc, qiliq_loc, nitot_loc, birim_loc
+   real :: v_qi_tmp, v_ni_tmp
+   real :: rhop ! bulk density of ice particle
+   integer :: dumi, dumjj, dumii, dumll, dumzz
+   real :: dum1, dum4, dum5, dum7, mu_i, dum6
+   real :: f1pr01, f1pr02
+   real,    dimension(n_args_r)     :: args_r
+   integer, dimension(n_args_i)     :: args_i
+   
+   qi_not_small: if (qitot.ge.qsmall) then
+      qitot_loc = qitot
+      qirim_loc = qirim
+      qiliq_loc = qiliq
+      nitot_loc = max(nitot,nsmall) !impose lower limits; prevents log(<0)
+      birim_loc = birim
+
+      call calc_bulkRhoRime(qitot_loc,qirim_loc,qiliq_loc,birim_loc,rhop)
+
+      call find_lookupTable_indices_1a(dumi,dumjj,dumii,dumll,dum1,dum4,       &
+               dum5,dum7,isize,rimsize,liqsize,densize,qitot_loc,           &
+               nitot_loc,qirim_loc,qiliq_loc,rhop)
+
+      call args_for_LUT(args_r,args_i,dum1,dum4,dum5,dum7,0.,0.,0.,0.,         &
+                        dumjj,dumii,dumll,dumi,0,0)
+
+      f1pr01 = proc_from_LUT_main2mom( 1,args_r,args_i)
+      f1pr02 = proc_from_LUT_main2mom( 2,args_r,args_i)
+
+      v_qi_tmp = f1pr02*rhofac   !mass-weighted fall speed (with air density factor)
+      v_ni_tmp = f1pr01*rhofac   !number-weighted fall speed (with air density factor)
+
+   else
+      v_qi_tmp = 0.0
+      v_ni_tmp = 0.0
+   endif qi_not_small
+
+   if (present(v_qi)) v_qi = v_qi_tmp
+   if (present(v_ni)) v_ni = v_ni_tmp
+
+ end subroutine get_ice_fallspeed_FT
+!! << JM_20260603
+
+!! JM_20260421 >> adding FFD from Phillips
+ real function interp_function(y, y1, y2, aprim, bprim)
+
+   !***********************************************************************
+   ! Defines the interpolation function for the FFD in Phillips et al. 2018 - Table B1
+   !
+   ! Parameters:
+   !   real :: y     - Variable of polynomial expressions
+   !   real :: y1    - Lower bound for interpolation
+   !   real :: y2    - Upper bound for interpolation
+   !   real :: aprim - Value of the function for y <= y1
+   !   real :: bprim - Value of the function for y >= y2
+   !
+   ! Returns:
+   !   real :: Value of the interpolated function
+   !
+   ! Author: Deepak W., Julian M.
+   ! Date  : 02.07.2025
+   !***********************************************************************
+
+        real, intent(in)  :: y, y1, y2, aprim, bprim
+        real              :: A, B, a0, a1, a2, a3
+
+        if(y <= y1) interp_function = aprim
+        if(y >= y2) interp_function = bprim
+
+        if(y1 < y .and. y < y2)then
+                A = 6.0*(aprim -bprim)/(y2-y1)**3.0
+                a3 = A/3.0;
+                a2 = -1.0*(A/2.0)*(y1 + y2);
+                a1 = A*y1*y2;
+                B = aprim + A*(y1**3.0)/6.0 - A*y1**2.0*y2/2.0;
+                a0 = B;
+
+                interp_function = a0 + a1*y + a2*y**2.0 + a3*y**3.0
+        endif
+
+        return
+ end function interp_function
+
+ real function param_zeta(xdiam, x_in)
+
+   !***********************************************************************
+   ! Defines the polynomial expressions of the parameters in table 3 and table 4.
+   !
+   ! Parameters:
+   !   real :: xdiam - Variable of polynomial expressions; xdiam=log10(D)
+   !   real :: x_in  - Parameter for polynomials in table 3 or 4:
+   !                       x_in==0: table 3
+   !                       x_in==1: table 4
+   ! Returns:
+   !   real :: Value of parameter zeta
+   !
+   ! Author: Deepak W., Julian M.
+   ! Date  : 02.07.2025
+   !***********************************************************************
+
+         real, intent(in) :: xdiam
+         integer, intent(in) ::  x_in
+         real :: log_zeta
+
+         param_zeta = 0.0; log_zeta = 0.0
+         if(x_in == 0)then
+               log_zeta = 2.4268 * xdiam**3.0 + 3.3274 * xdiam**2.0 + 2.0783 * xdiam + 1.2927
+               param_zeta = 10.0**log_zeta         ! (Table 3, eq 1, Phillips et al. 2018)
+         elseif(x_in == 1)then
+               log_zeta = -0.4651 * xdiam**3.0 - 1.1072 * xdiam**2.0 - 0.4539 * xdiam + 0.5137
+               param_zeta = log_zeta               ! (Table 4, eq 3, Phillips et al. 2018)
+         endif
+
+         return
+ end function param_zeta
+
+ real function param_eta(xdiam, x_in)
+
+   !***********************************************************************
+   ! Defines the polynomial expressions of the parameters in table 3 and table 4.
+   !
+   ! Parameters:
+   !   real :: xdiam - Variable of polynomial expressions; xdiam=log10(D)
+   !   real :: x_in  - Parameter for polynomials in table 3 or 4:
+   !                       x_in==0: table 3
+   !                       x_in==1: table 4
+   !
+   ! Returns:
+   !   real :: Value of parameter eta
+   !
+   ! Author: Deepak W., Julian M.
+   ! Date  : 02.07.2025
+   !***********************************************************************
+
+         real, intent(in) :: xdiam
+         integer, intent(in) :: x_in
+         real :: log_eta
+
+         param_eta = 0.0; log_eta = 0.0
+         if(x_in == 0)then
+               log_eta = 0.1242 * xdiam**3.0 - 0.2316 * xdiam**2.0 - 0.9874 * xdiam - 0.0827
+               param_eta = 10.0**log_eta   ! (Table 3, eq 1, Phillips et al. 2018)
+         elseif(x_in == 1)then
+               log_eta = 28.5888 * xdiam**3.0 + 49.8504 * xdiam**2.0 + 22.4873 * xdiam + 8.0481
+               param_eta = log_eta         ! (Table 4, eq 3, Phillips et al. 2018)
+         endif
+
+ end function param_eta
+
+ real function param_beta(xdiam)
+
+   !***********************************************************************
+   ! Defines the polynomial expressions of the parameters in Table 3 - eq 1
+   !
+   ! Parameters:
+   !   real :: xdiam - Variable of polynomial expressions; xdiam=log10(D)
+   !
+   ! Returns:
+   !   real :: Value of parameter beta
+   !
+   ! Author: Deepak W., Julian M.
+   ! Date  : 02.07.2025
+   !***********************************************************************
+
+         real, intent(in) :: xdiam
+
+         param_beta= -0.1839 * xdiam**2.0 - 0.2017 * xdiam - 0.0512
+
+         return
+ end function param_beta
+
+ real function param_temp0(xdiam, x_in)
+
+   !***********************************************************************
+   ! Defines the polynomial expressions of the parameters in Table 3 and Table 4.
+   !
+   ! Parameters:
+   !   real :: xdiam - Variable of polynomial expressions; xdiam=log10(D)
+   !   real :: x_in  - Parameter for polynomials in Table 3 or 4:
+   !                       x_in==0: Table 3
+   !                       x_in==1: Table 4
+   !
+   ! Returns:
+   !   real :: Value of parameter temp0
+   !
+   ! Author: Deepak W., Julian M.
+   ! Date  : 02.07.2025
+   !***********************************************************************
+
+         real, intent(in)    :: xdiam
+         integer, intent(in) :: x_in
+
+         param_temp0 = 0.0
+         if(x_in == 0)then
+               ! (Table 3, eq 1, Phillips et al. 2018)
+               param_temp0= -1.3999 * xdiam**3.0 - 5.3285 * xdiam**2.0 -3.9847 * xdiam - 15.0332
+         elseif(x_in == 1)then
+               ! (Table 4, eq 3, Phillips et al. 2018)
+               param_temp0 = 13.3588 * xdiam**3.0 + 15.7432 * xdiam**2.0 - 2.6543 * xdiam - 18.4875
+         endif
+
+         return
+ end function param_temp0
+
+ subroutine delN_drop_freeze_mode1(tempk, d_drop, n_small_frag, n_big_frag)
+   
+   !***********************************************************************
+   ! Function: delN_drop_freeze_mode1
+   !
+   ! Purpose:
+   !   Calculates the number of small and big RF fragments per frozen drop (not including the parent particle).
+   !   Eq. (1) is based on observations of drops of mass m freezing in collision with less massive crystals (m_i < m)
+   !   This equation should only be applied for such collisions or for heterogeneous ice nucleation.
+   !
+   ! Input parameters:
+   !   real :: tempk           - Ambient air temperature [K]
+   !   real :: d_drop          - mean droplet diameter [m]
+   !
+   ! Output parameters:
+   !   real :: n_small_frag    - Small fragments predicted by substruction of total and big fragments [#]
+   !   real :: n_big_frag      - Big fragments predicted by Eq. (3) [#]
+   !
+   ! Author: Deepak W., Julian M.
+   ! Date  : 02.07.2025
+   ! Date modified: 02.06.2025 (JM)
+   !***********************************************************************
+
+   real, intent(in)  :: tempk, d_drop
+   real, intent(out) :: n_small_frag, n_big_frag
+   integer           :: i, j, k
+   real              :: tempc, d_drop_mm, onset_d_fact, onset_t_fact, xdiam, term_a, &
+                            beta_tot, zeta_tot, eta_tot, temp0_tot, &
+                            zeta_big, eta_big, temp0_big, n_tot_frag
+   real, parameter   :: del_d = 1.e-5,  &  ! del_D [m] (Table B1, Phillips et al. 2018)
+                        d_min = 50.e-6, &  ! minimum diameter of drops for fragmentation [m]
+                        tc_max = -3.0,  &  ! Maximum freezing temperature of drops for fragmentation [°C]
+                        del_tc = 3.0       ! Interval of freezing temperature for onset of fragmentation [°C]
+
+   ! Initialisation
+   tempc=0.0; d_drop_mm=0.0; onset_d_fact=0.0; onset_t_fact=0.0; xdiam=0.0; term_a=0.0;
+   beta_tot=0.0; zeta_tot=0.0; eta_tot=0.0; temp0_tot=0.0;
+   zeta_big=0.0; eta_big=0.0; temp0_big=0.0;
+   n_small_frag=0.0; n_big_frag=0.0; n_tot_frag=0.0;
+
+   ! Converting from m to mm and K to °C
+   d_drop_mm = max(d_drop*1e3, 0.0)
+   tempc = tempk-273.15
+
+   ! Xi and Omega-functions of Eq. (1) and (3)
+   onset_d_fact = interp_function(d_drop, d_min, d_min+del_d, 0.0, 1.0)                  ! Drop. size depend. interp. for onset factor             
+   onset_t_fact = interp_function(-1.0*tempc, -1.0*tc_max, -1.0*tc_max+del_tc, 0.0, 1.0) ! Temp depend. interp. for onset factor
+
+   if(d_drop_mm > 0.0 .and. d_drop_mm <= 1.6)then
+         ! Parameters for Eq. (1)
+         if(d_drop_mm >= 0.4 .and. d_drop_mm <= 1.6)then
+                  xdiam = log10(d_drop_mm)
+                  beta_tot = param_beta(xdiam)
+         elseif(d_drop_mm < 0.4)then
+                  beta_tot = 0.0
+         endif
+
+         if(d_drop_mm >= 0.06 .and. d_drop_mm <= 1.6)then
+                  xdiam = log10(d_drop_mm)
+
+                  ! Parameters for Eq. (1)
+                  zeta_tot  = param_zeta(xdiam, 0)
+                  eta_tot   = param_eta(xdiam, 0)
+                  temp0_tot = param_temp0(xdiam, 0)
+
+                  ! Parameters for Eq. (3)
+                  zeta_big  = param_zeta(xdiam, 1)
+                  eta_big   = param_eta(xdiam, 1)
+                  temp0_big = param_temp0(xdiam, 1)
+         else
+                  ! Assumptions: In Phillips, the minimal value of 0.06 is used.
+                  !              This can be modified if needed.
+                  xdiam = log10(0.06)
+
+                  ! Parameters for Eq. (1)
+                  zeta_tot  = param_zeta(xdiam, 0)
+                  eta_tot   = param_eta(xdiam, 0)
+                  temp0_tot = param_temp0(xdiam, 0)
+
+                  ! Parameters for Eq. (3)
+                  zeta_big  = param_zeta(xdiam, 1)
+                  eta_big   = param_eta(xdiam, 1)
+                  temp0_big = param_temp0(xdiam, 1)
+         endif
+
+         ! Number of RF fragments per frozen drop, i.e. Eq. (1)
+         term_a = zeta_tot * eta_tot**2.0/((tempc - temp0_tot)**2.0 + eta_tot**2.0)
+         n_tot_frag = onset_d_fact * onset_t_fact * (term_a + beta_tot * tempc)
+
+         ! Number of big RF fragments per frozen drop, i.e. Eq. (3)
+         term_a     = zeta_big * eta_big**2.0/((tempc - temp0_big)**2.0 + eta_big**2.0)
+         n_big_frag = onset_d_fact * onset_t_fact * term_a
+         n_big_frag = min(n_big_frag, n_tot_frag)
+
+         ! Number of small RF fragments per frozen drop, i.e. Eq. (2)
+         n_small_frag = n_tot_frag - n_big_frag
+
+   elseif(d_drop_mm > 1.6)then
+         ! Above d_drop_mm >1.6mm, we linearly extrapolate the number of fragments: N(D > 1.6 mm, T) = N(1.6 mm, T) * D(mm)/1.6.
+         xdiam = log10(1.6)
+
+         ! Parameters for Eq. (1)
+         beta_tot = param_beta(xdiam)
+         zeta_tot = param_zeta(xdiam, 0)
+         eta_tot = param_eta(xdiam, 0)
+         temp0_tot = param_temp0(xdiam, 0)
+
+         ! Number of RF fragments per frozen drop, i.e. Eq. (1)
+         term_a = zeta_tot * eta_tot**2.0/((tempc - temp0_tot)**2.0 + eta_tot**2.0)
+         n_tot_frag = onset_d_fact * onset_t_fact * (term_a + beta_tot * tempc)
+         n_tot_frag = n_tot_frag * d_drop_mm/1.6
+
+         ! Parameters for Eq. (3)
+         zeta_big = param_zeta(xdiam, 1)
+         eta_big  = param_eta(xdiam, 1)
+         temp0_big = param_temp0(xdiam, 1)
+
+         ! Number of big RF fragments per frozen drop, i.e. Eq. (3)
+         term_a = zeta_big * eta_big**2.0/((tempc - temp0_big)**2.0 + eta_big**2.0)
+         n_big_frag = onset_d_fact * onset_t_fact * term_a
+         n_big_frag = min(n_big_frag, n_tot_frag)
+
+         ! Number of small RF fragments per frozen drop, i.e. Eq. (2)
+         n_small_frag = n_tot_frag - n_big_frag
+
+   endif
+
+   ! Assumptions: These values are choosen with respect to the Eq. (1) and FIG1 (e) in Phillips: n_total <= 10**2 and n_big <= 10**0 for D=1.6mm AND
+   !              using d_drop_mm = 5.0mm: n_total < 220, n_small_frag < 220 and n_big_frag < 1.0
+   !              They can be modified if needed
+   n_small_frag = max(min(n_small_frag, 219.), 0.0)
+   n_big_frag   = max(min(n_big_frag, 1.0), 0.0)
+   
+   return
+ end subroutine delN_drop_freeze_mode1
+
+!======================================================================================!
+ real function delN_drop_splash_mode2(tempk, d_rain, m_rain, m_ice, v_rain, v_ice)
+
+ !--------------------------------------------------------------------------
+ ! Calculates the total number of splashes through collision of rain drop  -
+ ! with bigger ice particles (m < mi)
+ ! 
+ ! Parameters:
+ !   - tempk:  ambient air temperature [K]
+ !   - d_rain: mean rain drop diameter [m]
+ !   - m_rain: mean rain drop mass [kg]
+ !   - m_ice:  mean ice particle mass [kg]
+ !   - v_rain: fall velocity of rain drop [m/s]
+ !   - v_ice:  fall velocity of ice particle [m/s]
+ !
+ ! Returns:
+ !   - delN:   Total number of splashes (frozen and liquid) per collisional event
+ !--------------------------------------------------------------------------
+
+ implicit none
+
+! Arguments:
+ real, intent(in)  :: tempk, d_rain, m_rain, m_ice, v_rain, v_ice
+
+! Local variables and parameters:
+ real             :: tempc, frac_frozen, cke_k0, diml_energy, n_drop_splash
+ real, parameter  :: c_water = 4200.0,    &  ! Specific heat capacity of liq. water [J/K/kg]
+                     lh_freez = 3.3e5,    &  ! Specific latent heat of freezing [J/kg]
+                     gamma_liq = 7.28e-2, &  ! Surface tension of liq. water [J/m2]
+                     pi = 3.1415,         &
+                     diml_energy_crit = 0.2  ! Critical dimensionless energy for onset of splashing on impact
+
+! Initialisation
+ tempc=0.0; frac_frozen = 0.0; cke_k0 = 0.0; diml_energy = 0.0; n_drop_splash = 0.0; delN_drop_splash_mode2=0.0
+
+! Converting from K to °C
+ tempc = tempk-273.15
+
+! Fraction frozen at the end of stage 1 (Eq. f(T) on page 3039 before Eq. (6))
+ frac_frozen = max(c_water*abs(tempc)/lh_freez, 0.0)
+
+! Collision kinetic energy (CKE) K0 before Eq. (6)
+ cke_k0 = max(0.5 * (m_rain*m_ice/(m_rain+m_ice)) * (v_rain - v_ice)**2.0, 0.0)
+
+! Dimensionless energy as in Eq. (6)
+ diml_energy = max(cke_k0/(pi*gamma_liq*(d_rain**2.0)), 0.0)
+
+! Number of total splashes per collisional event, i.e. Eq. (7)/phi(T)
+ delN_drop_splash_mode2 = max(3.0 * (1.0 - frac_frozen) * max((diml_energy - diml_energy_crit), 0.0), 0.0)
+ 
+ return
+
+ end function delN_drop_splash_mode2
+!======================================================================================!
+!! << JM_20260421
 
  END MODULE microphy_p3
