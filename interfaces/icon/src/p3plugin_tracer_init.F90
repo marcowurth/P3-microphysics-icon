@@ -24,6 +24,11 @@ MODULE p3plugin_tracer_init
 !! << JM_20260629
   USE microphy_p3,             ONLY : p3_init, status_ok
 
+!! JM_20260723 >>
+  USE p3plugin_global_vars,    ONLY : n_diag_wrm_2mom, n_diag_ice_2mom, n_diag_ice_2mom_coll, n_diag_ice_2mom_liqfrac, n_diag_ice_3mom
+  USE p3plugin_global_vars,    ONLY : diag_wrm_2mom, diag_ice_2mom, diag_ice_2mom_coll, diag_ice_2mom_liqfrac, diag_ice_3mom
+!! << JM_20260723
+
   IMPLICIT NONE
   PRIVATE
 
@@ -77,12 +82,24 @@ CONTAINS
     fastphystep = 1
 
 !! JM_20260629 >> adding n_inact as argument for depletion of INPs
-    if (.not. allocated(n_inact)) then
-      allocate(n_inact(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
-    endif
+    ALLOCATE(n_inact(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
     n_inact(:,:,:) = 0.0
     IF (rank_world == 0) WRITE (0,*) 'initialized n_inact to zero for all cells'
 !! << JM_20260629
+
+!! JM_20260723 >> trying to make warm-phase/ice-phase diagnostics accumulated
+    ALLOCATE(diag_wrm_2mom(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_diag_wrm_2mom))
+    ALLOCATE(diag_ice_2mom(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_diag_ice_2mom))
+    ALLOCATE(diag_ice_2mom_coll(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_icecat, n_diag_ice_2mom_coll))
+    ALLOCATE(diag_ice_2mom_liqfrac(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_diag_ice_2mom_liqfrac))
+    ALLOCATE(diag_ice_3mom(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_diag_ice_3mom))
+    diag_wrm_2mom(:,:,:,:) = 0.0
+    diag_ice_2mom(:,:,:,:,:) = 0.0
+    diag_ice_2mom_coll(:,:,:,:,:,:) = 0.0
+    diag_ice_2mom_liqfrac(:,:,:,:,:) = 0.0
+    diag_ice_3mom(:,:,:,:,:) = 0.0
+    IF (rank_world == 0) WRITE(0,*) 'initialized diag_wrm_2mom, diag_ice_2mom, diag_ice_2mom_coll, diag_ice_2mom_liqfrac and diag_ice_3mom to zero for all cells'
+!! << JM_20260723
 
     CALL mp_vars%ice_gsp_rate%to_3d(mp_vars_3d%ice_gsp_rate)
     CALL mp_vars%ice_gsp%to_3d(mp_vars_3d%ice_gsp)

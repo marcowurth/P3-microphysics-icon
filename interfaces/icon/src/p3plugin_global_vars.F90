@@ -5,9 +5,10 @@ MODULE p3plugin_global_vars
   USE p3plugin_types,          ONLY : t_dyn_vars_handle, t_mp_vars_handle, t_p3_vars_handle,   &
     &                                 t_icon_tracer_handle, t_p3_tracer_handle
 
-!! JM_20260407 >> adding new comin handle type for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-  USE p3plugin_types,          ONLY : t_p3_ice_diag_2mom_handle, t_p3_ice_diag_2mom_coll_handle, t_p3_ice_diag_2mom_liqfrac_handle, &
-                                      t_p3_ice_diag_3mom_handle
+!! JM_20260407 >> adding new comin handle type for 2-moment warm-phase, 2-moment ice-phase, 2-moment ice-ice collision, 2-moment ice-liquid and 3-moment ice-phase diagnostics
+  USE p3plugin_types,          ONLY : t_p3_diag_wrm_2mom_handle, t_p3_diag_ice_2mom_handle, &
+                                      t_p3_diag_ice_2mom_coll_handle, t_p3_diag_ice_2mom_liqfrac_handle, &
+                                      t_p3_diag_ice_3mom_handle
 !! << JM_20260407
 
   IMPLICIT NONE
@@ -26,22 +27,33 @@ MODULE p3plugin_global_vars
 !! JM_20260629 >> adding n_inact as argument for depletion of INPs
   PUBLIC :: n_inact
 !! << JM_20260629
-!! JM_20260407 >> defining new comin handle for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-  PUBLIC :: p3_ice_diag_2mom, p3_ice_diag_2mom_coll, p3_ice_diag_2mom_liqfrac, p3_ice_diag_3mom
+!! JM_20260407 >> defining new comin handle for 2-moment warm-phase, 2-moment ice-phase, 2-moment ice-ice collision, 2-moment ice-liquid and 3-moment ice-phase diagnostics
+  PUBLIC :: p3_diag_wrm_2mom, p3_diag_ice_2mom, p3_diag_ice_2mom_coll, p3_diag_ice_2mom_liqfrac, p3_diag_ice_3mom
 !! << JM_20260407
+!! JM_20260723 >> new integer for warm-/ice-phase diagnostics
+  PUBLIC :: n_diag_wrm_2mom, n_diag_ice_2mom, n_diag_ice_2mom_coll, n_diag_ice_2mom_liqfrac, n_diag_ice_3mom
+  PUBLIC :: diag_wrm_2mom, diag_ice_2mom, diag_ice_2mom_coll, diag_ice_2mom_liqfrac, diag_ice_3mom
+!! << JM_20260723
 
   INTEGER        :: comm_world, comm_insidenode, rank_world, rank_insidenode
   INTEGER        :: numprocs_insidenode, max_patch_size
   INTEGER        :: n_icecat, itracer_ini, fastphystep
   REAL           :: dtime
   LOGICAL        :: l3mom_ice, lliqfrac
+  CHARACTER(999) :: tracer_ini_filename, lookup_tables_path
+  INTEGER        :: autoAccr_param_in = 2
+
 !! JM_20260629 >> adding n_inact as argument for depletion of INPs
   REAL, ALLOCATABLE :: n_inact(:,:,:)
 !! << JM_20260629
-  CHARACTER(999) :: tracer_ini_filename, lookup_tables_path
-!! JM_20260331 >> adding default value here, as it will be initialized with 0 when no value is given in the p3-nml block
-  INTEGER        :: autoAccr_param_in = 2
-!! << JM_20260331
+!! JM_20260723 >> trying to make warm-phase and ice-phase diagnostics accumulated
+  INTEGER           :: n_diag_wrm_2mom = 7
+  INTEGER           :: n_diag_ice_2mom = 39
+  INTEGER           :: n_diag_ice_2mom_coll = 1
+  INTEGER           :: n_diag_ice_2mom_liqfrac = 15
+  INTEGER           :: n_diag_ice_3mom = 7
+  REAL, ALLOCATABLE :: diag_wrm_2mom(:,:,:,:), diag_ice_2mom(:,:,:,:,:), diag_ice_2mom_coll(:,:,:,:,:,:), diag_ice_2mom_liqfrac(:,:,:,:,:), diag_ice_3mom(:,:,:,:,:)
+!! << JM_20260723
 
   INTEGER, ALLOCATABLE :: node_patches_sizes(:)
   INTEGER, ALLOCATABLE :: node_patches_idx(:, :)
@@ -55,11 +67,12 @@ MODULE p3plugin_global_vars
   TYPE(t_icon_tracer_handle)            :: icon_tracer, icon_tracer_ddt_turb
   TYPE(t_p3_tracer_handle), ALLOCATABLE :: p3_tracer(:), p3_tracer_ddt_turb(:)
 
-!! JM_20260407 >> defining new comin handle for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-  TYPE(t_p3_ice_diag_2mom_handle), ALLOCATABLE         :: p3_ice_diag_2mom(:)
-  TYPE(t_p3_ice_diag_2mom_coll_handle), ALLOCATABLE    :: p3_ice_diag_2mom_coll(:,:)
-  TYPE(t_p3_ice_diag_2mom_liqfrac_handle), ALLOCATABLE :: p3_ice_diag_2mom_liqfrac(:)
-  TYPE(t_p3_ice_diag_3mom_handle), ALLOCATABLE         :: p3_ice_diag_3mom(:)
+!! JM_20260407 >> defining new comin handle for 2-moment warm-phase, 2-moment ice-phase, 2-moment ice-ice collision, 2-moment ice-liquid and 3-moment ice-phase diagnostics
+  TYPE(t_p3_diag_wrm_2mom_handle)                      :: p3_diag_wrm_2mom
+  TYPE(t_p3_diag_ice_2mom_handle), ALLOCATABLE         :: p3_diag_ice_2mom(:)
+  TYPE(t_p3_diag_ice_2mom_coll_handle), ALLOCATABLE    :: p3_diag_ice_2mom_coll(:,:)
+  TYPE(t_p3_diag_ice_2mom_liqfrac_handle), ALLOCATABLE :: p3_diag_ice_2mom_liqfrac(:)
+  TYPE(t_p3_diag_ice_3mom_handle), ALLOCATABLE         :: p3_diag_ice_3mom(:)
 !! << JM_20260407
 
 END MODULE p3plugin_global_vars

@@ -1035,9 +1035,9 @@ END subroutine p3_init
                       log_LiquidFrac = log_liqFrac,                                                    &
                       diag_dhmax     = diag_dhmax,                                                     &
                       freq3Ddiag_in  = freq3Ddiag,                                                     &
-!! JM_20260407 << adding dummy values here
-                      n_diag_2mom = 0, n_diag_2mom_coll = 0,  n_diag_2mom_liqfrac = 0,                 &
-                      n_diag_3mom = 0)
+!! JM_20260723 << adding dummy values here
+                      n_diag_wrm_2mom = 0, n_diag_ice_2mom = 0, n_diag_ice_2mom_coll = 0,              &
+                      n_diag_ice_2mom_liqfrac = 0, n_diag_ice_3mom = 0)
 !! << JM_20260407
 
      !surface precipitation output:
@@ -1573,9 +1573,9 @@ END subroutine p3_init
                   diag_dhmax     = diag_dhmax,                                                 &
                   supi_nuc_in    = supdepthr,                                                  &
                   freq3Ddiag_in  = freq3Ddiag_gem,                                             &
-!! JM_20260407 << adding dummy values here
-                  n_diag_2mom = 0, n_diag_2mom_coll = 0,  n_diag_2mom_liqfrac = 0,             &
-                  n_diag_3mom = 0)
+!! JM_20260723 >> adding dummy values here
+                  n_diag_wrm_2mom = 0, n_diag_ice_2mom = 0, n_diag_ice_2mom_coll = 0,          &
+                  n_diag_ice_2mom_liqfrac = 0, n_diag_ice_3mom = 0)
 !! << JM_20260407
 
       if (global_status /= STATUS_OK) return
@@ -1995,9 +1995,9 @@ END subroutine p3_init
 !! JM_20260629 >> adding n_inact as an argument for the depletion of INPs
                     n_inact,                                                              &
 !! JM_20260629
-!! JM_20260407 >> adding arguments for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-                    n_diag_2mom,n_diag_2mom_coll,n_diag_2mom_liqfrac,n_diag_3mom,         &
-                    ice_diag_2mom,ice_diag_2mom_coll,ice_diag_2mom_liqfrac,ice_diag_3mom)
+!! JM_20260407 >> adding arguments for 2-moment warm-phase, 2-moment ice-phase, 2-moment ice-ice collision, 2-moment ice-liquid and 3-moment ice-phase diagnostics
+                    n_diag_wrm_2mom,n_diag_ice_2mom,n_diag_ice_2mom_coll,n_diag_ice_2mom_liqfrac,n_diag_ice_3mom, &
+                    diag_wrm_2mom, diag_ice_2mom,diag_ice_2mom_coll,diag_ice_2mom_liqfrac,diag_ice_3mom)
 !! << JM_20260407
 
 !----------------------------------------------------------------------------------------!
@@ -2023,11 +2023,12 @@ END subroutine p3_init
  integer, intent(in)                                  :: nCat       ! number of ice-phase categories
  integer, intent(in)                                  :: n_diag_2d  ! number of 2D diagnostic fields
  integer, intent(in)                                  :: n_diag_3d  ! number of 3D diagnostic fields
-!! JM_20260407 >> adding integer for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
- integer, intent(in)                                  :: n_diag_2mom         ! number of 4D diagnostic fields
- integer, intent(in)                                  :: n_diag_2mom_coll    ! number of 5D diagnostic fields
- integer, intent(in)                                  :: n_diag_2mom_liqfrac ! number of 4D diagnostic fields for liquid fraction
- integer, intent(in)                                  :: n_diag_3mom         ! number of 4D diagnostic fields for ice-phase 3-moment
+!! JM_20260407 >> adding integer for 2-moment warm-phase, 2-moment ice-phase, 2-moment ice-ice collision, 2-moment ice-liquid and 3-moment ice-phase diagnostics
+ integer, intent(in)                                  :: n_diag_wrm_2mom         ! number of 4D diagnostic fields for warm-phase 2-moment
+ integer, intent(in)                                  :: n_diag_ice_2mom         ! number of 4D diagnostic fields
+ integer, intent(in)                                  :: n_diag_ice_2mom_coll    ! number of 5D diagnostic fields
+ integer, intent(in)                                  :: n_diag_ice_2mom_liqfrac ! number of 4D diagnostic fields for liquid fraction
+ integer, intent(in)                                  :: n_diag_ice_3mom         ! number of 4D diagnostic fields for ice-phase 3-moment
 !! << JM_20260407
 
  real, intent(inout), dimension(its:ite,kts:kte)      :: qc         ! cloud, mass mixing ratio         kg kg-1
@@ -2069,11 +2070,12 @@ END subroutine p3_init
  real, intent(out),   dimension(its:ite,kts:kte), optional :: diag_vis3  ! visibility through snow     m
  real, intent(out),   dimension(its:ite,n_diag_2d)         :: diag_2d    ! user-defined 2D diagnostic fields
  real, intent(out),   dimension(its:ite,kts:kte,n_diag_3d) :: diag_3d    ! user-defined 3D diagnostic fields
-!! JM_20260407 >> adding 4D/5D diag for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
- real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_2mom), optional           :: ice_diag_2mom         ! user-defined 4D diagnostic fields for ice-phase diagnostics
- real, intent(out),   dimension(its:ite,kts:kte,nCat,nCat,n_diag_2mom_coll), optional :: ice_diag_2mom_coll    ! user-defined 5D diagnostic fields for ice-ice collision diagnostics
- real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_2mom_liqfrac), optional   :: ice_diag_2mom_liqfrac ! user-defined 4D diagnostic fields for ice-liquid diagnostics
- real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_3mom), optional           :: ice_diag_3mom         ! user-defined 4D diagnostic fields for ice-phase 3-moment diagnostics
+!! JM_20260407 >> adding 4D/5D diag for 2-moment warm-phase, 2-moment ice-phase, 2-moment ice-ice collision, 2-moment ice-liquid and 3-moment ice-phase diagnostics
+ real, intent(out),   dimension(its:ite,kts:kte,n_diag_wrm_2mom), optional                :: diag_wrm_2mom         ! user-defined 4D diagnostic fields for warm-phase 2-moment diagnostics
+ real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_ice_2mom), optional           :: diag_ice_2mom         ! user-defined 4D diagnostic fields for ice-phase 2-moment diagnostics
+ real, intent(out),   dimension(its:ite,kts:kte,nCat,nCat,n_diag_ice_2mom_coll), optional :: diag_ice_2mom_coll    ! user-defined 5D diagnostic fields for ice-ice collision 2-moment diagnostics
+ real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_ice_2mom_liqfrac), optional   :: diag_ice_2mom_liqfrac ! user-defined 4D diagnostic fields for ice-liquid 2-moment diagnostics
+ real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_ice_3mom), optional           :: diag_ice_3mom         ! user-defined 4D diagnostic fields for ice-phase 3-moment diagnostics
 !! << JM_20260407
 !! JM_20260629 >> adding 4230553 as an argument for the depletion of INPs
  real, intent(inout), dimension(its:ite,kts:kte), optional :: n_inact ! number of activated INPs  # kg-1
@@ -2550,12 +2552,6 @@ call cpu_time(timer_start(1))
  if (present(diag_dhmax)) diag_dhmax = 0.
  diag_2d    = 0.
  diag_3d    = 0.
- !! JM_20260407 >> adding initialization
- if (present(ice_diag_2mom)) ice_diag_2mom = 0.
- if (present(ice_diag_2mom_liqfrac)) ice_diag_2mom_liqfrac = 0.
- if (present(ice_diag_2mom_coll)) ice_diag_2mom_coll = 0.
- if (present(ice_diag_3mom)) ice_diag_3mom = 0.
- !! << JM_20260407
  rhorime_c  = 400.
 !rhorime_r  = 400.
  f1pr22     = -99.  !to avoid uninialized variable (in case of accidental use)
@@ -3801,7 +3797,7 @@ call cpu_time(timer_start(3))
             ! !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
             ! !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
             !  call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
-             
+
             !  !-- number of fragments from FFD 
             !  dum1_small = ns_frag * N_nuc                     ! total number of small fragments from FFD
             !  dum1_big   = nb_frag * N_nuc                     ! total number of big fragments from FFD
@@ -3819,7 +3815,7 @@ call cpu_time(timer_start(3))
             !  else
             !     iice_dest_ffd = 1
             !  endif
-             
+
             !  qrheti(iice_dest) = qrheti(iice_dest) - dum2_small
             !  if (qrheti(iice_dest) .lt. 0.0 ) then
             !    dum2_small = qrheti(iice_dest) + dum2_small
@@ -4026,7 +4022,7 @@ call cpu_time(timer_start(3))
          !             endif
                      
          !             !-- number and mass of small fragments from FFD
-         !             dum1_small = E_freeze * nrcol(iice) * ns_frag      ! total number of small fragments from FFD
+         !             dum1_small = E_freeze * nrcol(iice) * ns_frag        ! total number of small fragments from FFD
          !             dum2_small = dum1_small * piov6 * 900 * D_small**3   ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
                      
          !             qrcol(iice) = qrcol(iice) - dum2_small
@@ -4677,25 +4673,22 @@ call cpu_time(timer_start(3))
           qcheti = qcheti*ratio
           qcshd  = qcshd*ratio
           qcmul  = qcmul*ratio
-!! JM_20260623 >> adding qcmuld_ffd_rim from Phillips FFD parameterization
-          qcmul_ffd_rim = qcmul_ffd_rim*ratio
-          ncmul_ffd_rim = ncmul_ffd_rim*ratio
-!! << JM_20260623
           qwgrth1c = qwgrth1c*ratio
           qccoll = qccoll*ratio
-         !qchetc = qchetc*ratio !currently not used
-           ncautc = ncautc*ratio
-           ncacc  = ncacc*ratio
-           nccol  = nccol*ratio
-           ncheti = ncheti*ratio
+          !qchetc = qchetc*ratio !currently not used
+          ncautc = ncautc*ratio
+          ncacc  = ncacc*ratio
+          nccol  = nccol*ratio
+          ncheti = ncheti*ratio
           !nchetc = nchetc*ratio
-           nccoll = nccoll*ratio
+          nccoll = nccoll*ratio
+! JM note: why is ncslf not scaled here? it should be a sink term for nc
        endif
 
 ! rain
        sinks   = (qrevp+sum(qrcol)+sum(qrhetc)+sum(qrheti)+sum(qrmul)+sum(qrcoll)+       &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                 sum(qimul_ffd_frz)+sum(qimul_ffd_imm)+sum(qimul_ffd_rim)+ &
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing and rime splintering)
+                 sum(qimul_ffd_imm)+sum(qimul_ffd_rim)+sum(qcmul_ffd_rim)+ &
 !! << JM_20260619
                  sum(qwgrth1r))*dt
        sources = qr(i,k) + (qrcon+qcaut+qcacc+sum(qrmlt)+sum(qcshd)+sum(qlshd))*dt
@@ -4704,15 +4697,7 @@ call cpu_time(timer_start(3))
           qrevp  = qrevp*ratio
           qrcol  = qrcol*ratio
           qrheti = qrheti*ratio
-          qrmul  = qrmul*ratio ! JM note: is there a reason why nimul is not scaled?
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-          qimul_ffd_frz = qimul_ffd_frz*ratio
-          qimul_ffd_imm = qimul_ffd_imm*ratio
-          qimul_ffd_rim = qimul_ffd_rim*ratio
-          nimul_ffd_frz = nimul_ffd_frz*ratio
-          nimul_ffd_imm = nimul_ffd_imm*ratio
-          nimul_ffd_rim = nimul_ffd_rim*ratio
-!! << JM_20260619
+          qrmul  = qrmul*ratio
           qrcoll = qrcoll*ratio
           qwgrth1r = qwgrth1r*ratio
          !qrhetc = qrhetc*ratio !currently not used
@@ -4720,10 +4705,17 @@ call cpu_time(timer_start(3))
           nrcol  = nrcol*ratio
           nrheti = nrheti*ratio
           nrcoll = nrcoll*ratio
-!! JM_20260601 >> uncommenting contact freezing with ice crystals from lachapelle et al. (2024)
-         !  qrhetc = qrhetc*ratio
-         !  nrhetc = nrhetc*ratio
-!! << JM_20260601
+         !qrhetc = qrhetc*ratio
+         !nrhetc = nrhetc*ratio
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
+          qimul_ffd_imm = qimul_ffd_imm*ratio
+          qimul_ffd_rim = qimul_ffd_rim*ratio
+          qcmul_ffd_rim = qcmul_ffd_rim*ratio
+          nimul_ffd_imm = nimul_ffd_imm*ratio
+          nimul_ffd_rim = nimul_ffd_rim*ratio
+          ncmul_ffd_rim = ncmul_ffd_rim*ratio
+!! << JM_20260619
+! JM note: is there a reason why nimul, nrslf is not scaled?
        endif
 
 ! ice
@@ -4731,8 +4723,8 @@ call cpu_time(timer_start(3))
           sinks   = (qisub(iice)+qrmlt(iice)+qlevp(iice)+qlshd(iice))*dt
           sources = qitot(i,k,iice) + (qidep(iice)+qinuc(iice)+qrcol(iice)+qccol(iice)+  &
                     qrhetc(iice)+qrheti(iice)+qchetc(iice)+qcheti(iice)+qrmul(iice)+     &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                    qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+         &
+!! JM_20260619 >> adding multiple multiplication processes (immersion freezing and rime splintering)
+                    qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
 !! << JM_20260619
                     qcmul(iice)+qrcoll(iice)+qccoll(iice)+qlcon(iice)+qwgrth1c(iice)+    &
                     qwgrth1r(iice))*dt
@@ -4764,8 +4756,8 @@ call cpu_time(timer_start(3))
 ! qiliq
       if (log_LiquidFrac) then
        do iice = 1,nCat
-          sinks   = (qifrz(iice)+qlshd(iice)+qlevp(iice))*dt
-          sources = qiliq(i,k,iice) + (qimlt(iice)+qrcoll(iice)+qccoll(iice)+            &
+          sinks   = (qifrz(iice)+qimul_ffd_frz(iice)+qlshd(iice)+qlevp(iice))*dt ! JM_20260619: adding qimul_ffd_frz(iice) from Phillips FFD parameterization
+          sources = qiliq(i,k,iice) + (qimlt(iice)+qrcoll(iice)+qccoll(iice)+ &
                     qlcon(iice)+qwgrth1c(iice)+qwgrth1r(iice))*dt
           if (qitot(i,k,iice).ge.qsmall) then
              dum=qiliq(i,k,iice)/qitot(i,k,iice)
@@ -4782,6 +4774,10 @@ call cpu_time(timer_start(3))
           if (sinks.gt.sources .and. sinks.ge.1.e-20) then
              ratio = sources/sinks
              qifrz(iice) = qifrz(iice)*ratio
+!! JM_20260619 >> Phillips FFD parameterization
+             qimul_ffd_frz(iice) = qimul_ffd_frz(iice)*ratio
+             nimul_ffd_frz(iice) = nimul_ffd_frz(iice)*ratio
+!! << JM_20260619
              qlshd(iice) = qlshd(iice)*ratio
              qlevp(iice) = qlevp(iice)*ratio
              nlevp(iice) = nlevp(iice)*ratio
@@ -4809,98 +4805,93 @@ call cpu_time(timer_start(3))
           ninuc  = ninuc*ratio
           ncnuc  = ncnuc*ratio
        endif
-!! JM_20260330 >> add diagnostic for qcnuc, ncnuc, qccon, qrcon, qcevp, qrevp and nrevp here since these are the final values after
-!!                  - saturation adjustment limiting
-!!                  - vapor conservation limiting
-       diag_3d(i,k,3) = diag_3d(i,k,3) + qcnuc
-       diag_3d(i,k,4) = diag_3d(i,k,4) + qccon
-       diag_3d(i,k,5) = diag_3d(i,k,5) + qrcon
-       diag_3d(i,k,6) = diag_3d(i,k,6) + qcevp
-       diag_3d(i,k,7) = diag_3d(i,k,7) + qrevp
-       diag_3d(i,k,8) = diag_3d(i,k,8) + qcacc
-       diag_3d(i,k,9) = diag_3d(i,k,9) + qcaut
- !! << JM_20260330
- !! JM_20260407 >> add diagnostic for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-       if (present(ice_diag_2mom)) then
+!! JM_20260407 >> add 2-moment warm- and ice-phase, 2-moment ice-ice collision, 2-moment ice-liquid and 3-moment ice-phase diagnostics
+       if (present(diag_wrm_2mom)) then
+         diag_wrm_2mom(i,k,1) = diag_wrm_2mom(i,k,1) + qcnuc*dt
+         diag_wrm_2mom(i,k,2) = diag_wrm_2mom(i,k,2) + qccon*dt
+         diag_wrm_2mom(i,k,3) = diag_wrm_2mom(i,k,3) + qrcon*dt
+         diag_wrm_2mom(i,k,4) = diag_wrm_2mom(i,k,4) + qcevp*dt
+         diag_wrm_2mom(i,k,5) = diag_wrm_2mom(i,k,5) + qrevp*dt
+         diag_wrm_2mom(i,k,6) = diag_wrm_2mom(i,k,6) + qcacc*dt
+         diag_wrm_2mom(i,k,7) = diag_wrm_2mom(i,k,7) + qcaut*dt
+       endif
+       if (present(diag_ice_2mom)) then
           DO iice = 1,nCat
-             ice_diag_2mom(i,k,iice,1)  = ice_diag_2mom(i,k,iice,1)  + qidep(iice)
-             ice_diag_2mom(i,k,iice,2)  = ice_diag_2mom(i,k,iice,2)  + qisub(iice)
-             ice_diag_2mom(i,k,iice,3)  = ice_diag_2mom(i,k,iice,3)  + qinuc(iice)
-             ice_diag_2mom(i,k,iice,4)  = ice_diag_2mom(i,k,iice,4)  + qchetc(iice)
-             ice_diag_2mom(i,k,iice,5)  = ice_diag_2mom(i,k,iice,5)  + qcheti(iice)
-             ice_diag_2mom(i,k,iice,6)  = ice_diag_2mom(i,k,iice,6)  + qrhetc(iice)
-             ice_diag_2mom(i,k,iice,7)  = ice_diag_2mom(i,k,iice,7)  + qrheti(iice)
-             ice_diag_2mom(i,k,iice,8)  = ice_diag_2mom(i,k,iice,8)  + qrmlt(iice)
-             ice_diag_2mom(i,k,iice,9)  = ice_diag_2mom(i,k,iice,9)  + qccol(iice)
-             ice_diag_2mom(i,k,iice,10) = ice_diag_2mom(i,k,iice,10) + qrcol(iice)
-             ice_diag_2mom(i,k,iice,11) = ice_diag_2mom(i,k,iice,11) + qwgrth(iice)
-             ice_diag_2mom(i,k,iice,12) = ice_diag_2mom(i,k,iice,12) + qcshd(iice)
-             ice_diag_2mom(i,k,iice,13) = ice_diag_2mom(i,k,iice,13) + qcmul(iice)
-             ice_diag_2mom(i,k,iice,14) = ice_diag_2mom(i,k,iice,14) + qrmul(iice)
-             ice_diag_2mom(i,k,iice,15) = ice_diag_2mom(i,k,iice,15) + nimul(iice)
-             ! number concentrations
-             ice_diag_2mom(i,k,iice,16) = ice_diag_2mom(i,k,iice,16) + nccol(iice)
-             ice_diag_2mom(i,k,iice,17) = ice_diag_2mom(i,k,iice,17) + nrcol(iice)
-             ice_diag_2mom(i,k,iice,18) = ice_diag_2mom(i,k,iice,18) + ninuc(iice)
-             ice_diag_2mom(i,k,iice,19) = ice_diag_2mom(i,k,iice,19) + nimlt(iice)
-             ice_diag_2mom(i,k,iice,20) = ice_diag_2mom(i,k,iice,20) + nisub(iice)
-             ice_diag_2mom(i,k,iice,21) = ice_diag_2mom(i,k,iice,21) + nislf(iice)
-             ice_diag_2mom(i,k,iice,22) = ice_diag_2mom(i,k,iice,22) + nchetc(iice)
-             ice_diag_2mom(i,k,iice,23) = ice_diag_2mom(i,k,iice,23) + ncheti(iice)
-             ice_diag_2mom(i,k,iice,24) = ice_diag_2mom(i,k,iice,24) + nrhetc(iice)
-             ice_diag_2mom(i,k,iice,25) = ice_diag_2mom(i,k,iice,25) + nrheti(iice)
-             ice_diag_2mom(i,k,iice,26) = ice_diag_2mom(i,k,iice,26) + nrshdr(iice)
-             ice_diag_2mom(i,k,iice,27) = ice_diag_2mom(i,k,iice,27) + ncshdc(iice)
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-             ice_diag_2mom(i,k,iice,28) = ice_diag_2mom(i,k,iice,28) + qimul_ffd_frz(iice)
-             ice_diag_2mom(i,k,iice,29) = ice_diag_2mom(i,k,iice,29) + nimul_ffd_frz(iice)
-             ice_diag_2mom(i,k,iice,30) = ice_diag_2mom(i,k,iice,30) + qimul_ffd_imm(iice)
-             ice_diag_2mom(i,k,iice,31) = ice_diag_2mom(i,k,iice,31) + nimul_ffd_imm(iice)
-             ice_diag_2mom(i,k,iice,32) = ice_diag_2mom(i,k,iice,32) + qimul_ffd_rim(iice)
-             ice_diag_2mom(i,k,iice,33) = ice_diag_2mom(i,k,iice,33) + nimul_ffd_rim(iice)
-             ice_diag_2mom(i,k,iice,34) = ice_diag_2mom(i,k,iice,34) + qcmul_ffd_rim(iice)
-             ice_diag_2mom(i,k,iice,35) = ice_diag_2mom(i,k,iice,35) + ncmul_ffd_rim(iice)
-!! << JM_20260619
+             diag_ice_2mom(i,k,iice,1)  = diag_ice_2mom(i,k,iice,1)  + qidep(iice)*dt
+             diag_ice_2mom(i,k,iice,2)  = diag_ice_2mom(i,k,iice,2)  + qisub(iice)*dt
+             diag_ice_2mom(i,k,iice,3)  = diag_ice_2mom(i,k,iice,3)  + qinuc(iice)*dt
+             diag_ice_2mom(i,k,iice,4)  = diag_ice_2mom(i,k,iice,4)  + qchetc(iice)*dt
+             diag_ice_2mom(i,k,iice,5)  = diag_ice_2mom(i,k,iice,5)  + qcheti(iice)*dt
+             diag_ice_2mom(i,k,iice,6)  = diag_ice_2mom(i,k,iice,6)  + qrhetc(iice)*dt
+             diag_ice_2mom(i,k,iice,7)  = diag_ice_2mom(i,k,iice,7)  + qrheti(iice)*dt
+             diag_ice_2mom(i,k,iice,8)  = diag_ice_2mom(i,k,iice,8)  + qrmlt(iice)*dt
+             diag_ice_2mom(i,k,iice,9)  = diag_ice_2mom(i,k,iice,9)  + qccol(iice)*dt
+             diag_ice_2mom(i,k,iice,10) = diag_ice_2mom(i,k,iice,10) + qrcol(iice)*dt
+             diag_ice_2mom(i,k,iice,11) = diag_ice_2mom(i,k,iice,11) + qwgrth(iice)*dt
+             diag_ice_2mom(i,k,iice,12) = diag_ice_2mom(i,k,iice,12) + qcshd(iice)*dt
+             diag_ice_2mom(i,k,iice,13) = diag_ice_2mom(i,k,iice,13) + qcmul(iice)*dt
+             diag_ice_2mom(i,k,iice,14) = diag_ice_2mom(i,k,iice,14) + qrmul(iice)*dt
+             diag_ice_2mom(i,k,iice,15) = diag_ice_2mom(i,k,iice,15) + nimul(iice)*dt
+             diag_ice_2mom(i,k,iice,16) = diag_ice_2mom(i,k,iice,16) + nccol(iice)*dt
+             diag_ice_2mom(i,k,iice,17) = diag_ice_2mom(i,k,iice,17) + nrcol(iice)*dt
+             diag_ice_2mom(i,k,iice,18) = diag_ice_2mom(i,k,iice,18) + ninuc(iice)*dt
+             diag_ice_2mom(i,k,iice,19) = diag_ice_2mom(i,k,iice,19) + nimlt(iice)*dt
+             diag_ice_2mom(i,k,iice,20) = diag_ice_2mom(i,k,iice,20) + nisub(iice)*dt
+             diag_ice_2mom(i,k,iice,21) = diag_ice_2mom(i,k,iice,21) + nislf(iice)*dt
+             diag_ice_2mom(i,k,iice,22) = diag_ice_2mom(i,k,iice,22) + nchetc(iice)*dt
+             diag_ice_2mom(i,k,iice,23) = diag_ice_2mom(i,k,iice,23) + ncheti(iice)*dt
+             diag_ice_2mom(i,k,iice,24) = diag_ice_2mom(i,k,iice,24) + nrhetc(iice)*dt
+             diag_ice_2mom(i,k,iice,25) = diag_ice_2mom(i,k,iice,25) + nrheti(iice)*dt
+             diag_ice_2mom(i,k,iice,26) = diag_ice_2mom(i,k,iice,26) + nrshdr(iice)*dt
+             diag_ice_2mom(i,k,iice,27) = diag_ice_2mom(i,k,iice,27) + ncshdc(iice)*dt
+             diag_ice_2mom(i,k,iice,28) = diag_ice_2mom(i,k,iice,28) + qimul_ffd_frz(iice)*dt
+             diag_ice_2mom(i,k,iice,29) = diag_ice_2mom(i,k,iice,29) + nimul_ffd_frz(iice)*dt
+             diag_ice_2mom(i,k,iice,30) = diag_ice_2mom(i,k,iice,30) + qimul_ffd_imm(iice)*dt
+             diag_ice_2mom(i,k,iice,31) = diag_ice_2mom(i,k,iice,31) + nimul_ffd_imm(iice)*dt
+             diag_ice_2mom(i,k,iice,32) = diag_ice_2mom(i,k,iice,32) + qimul_ffd_rim(iice)*dt
+             diag_ice_2mom(i,k,iice,33) = diag_ice_2mom(i,k,iice,33) + nimul_ffd_rim(iice)*dt
+             diag_ice_2mom(i,k,iice,34) = diag_ice_2mom(i,k,iice,34) + qcmul_ffd_rim(iice)*dt
+             diag_ice_2mom(i,k,iice,35) = diag_ice_2mom(i,k,iice,35) + ncmul_ffd_rim(iice)*dt
           END DO
        endif
-       if (present(ice_diag_2mom_coll)) then
+       if (present(diag_ice_2mom_coll)) then
           DO iice = 1,nCat
             DO catcoll = 1,nCat
                if (catcoll.ne.iice) then
-                  ice_diag_2mom_coll(i,k,iice,catcoll,1) = ice_diag_2mom_coll(i,k,iice,catcoll,1) + qicol(iice,catcoll)
+                  diag_ice_2mom_coll(i,k,iice,catcoll,1) = diag_ice_2mom_coll(i,k,iice,catcoll,1) + qicol(iice,catcoll)*dt
                END IF
             END DO
           END DO
        endif
-       if (present(ice_diag_2mom_liqfrac)) then
+       if (present(diag_ice_2mom_liqfrac)) then
           DO iice = 1,nCat
-               ice_diag_2mom_liqfrac(i,k,iice,1)  = ice_diag_2mom_liqfrac(i,k,iice,1)  + qimlt(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,2)  = ice_diag_2mom_liqfrac(i,k,iice,2)  + qwgrth1(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,3)  = ice_diag_2mom_liqfrac(i,k,iice,3)  + qwgrth1c(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,4)  = ice_diag_2mom_liqfrac(i,k,iice,4)  + qwgrth1r(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,5)  = ice_diag_2mom_liqfrac(i,k,iice,5)  + qlshd(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,6)  = ice_diag_2mom_liqfrac(i,k,iice,6)  + qlcon(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,7)  = ice_diag_2mom_liqfrac(i,k,iice,7)  + qlevp(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,8)  = ice_diag_2mom_liqfrac(i,k,iice,8)  + qifrz(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,9)  = ice_diag_2mom_liqfrac(i,k,iice,9)  + qccoll(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,10) = ice_diag_2mom_liqfrac(i,k,iice,10) + qrcoll(iice)
+               diag_ice_2mom_liqfrac(i,k,iice,1)  = diag_ice_2mom_liqfrac(i,k,iice,1)  + qimlt(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,2)  = diag_ice_2mom_liqfrac(i,k,iice,2)  + qwgrth1(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,3)  = diag_ice_2mom_liqfrac(i,k,iice,3)  + qwgrth1c(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,4)  = diag_ice_2mom_liqfrac(i,k,iice,4)  + qwgrth1r(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,5)  = diag_ice_2mom_liqfrac(i,k,iice,5)  + qlshd(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,6)  = diag_ice_2mom_liqfrac(i,k,iice,6)  + qlcon(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,7)  = diag_ice_2mom_liqfrac(i,k,iice,7)  + qlevp(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,8)  = diag_ice_2mom_liqfrac(i,k,iice,8)  + qifrz(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,9)  = diag_ice_2mom_liqfrac(i,k,iice,9)  + qccoll(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,10) = diag_ice_2mom_liqfrac(i,k,iice,10) + qrcoll(iice)*dt
                ! number consentrations 
-               ice_diag_2mom_liqfrac(i,k,iice,11) = ice_diag_2mom_liqfrac(i,k,iice,11) + nlshd(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,12) = ice_diag_2mom_liqfrac(i,k,iice,12) + nlevp(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,13) = ice_diag_2mom_liqfrac(i,k,iice,13) + nrcoll(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,14) = ice_diag_2mom_liqfrac(i,k,iice,14) + nccoll(iice)
-               ice_diag_2mom_liqfrac(i,k,iice,14) = ice_diag_2mom_liqfrac(i,k,iice,15) + nifrz(iice)
+               diag_ice_2mom_liqfrac(i,k,iice,11) = diag_ice_2mom_liqfrac(i,k,iice,11) + nlshd(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,12) = diag_ice_2mom_liqfrac(i,k,iice,12) + nlevp(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,13) = diag_ice_2mom_liqfrac(i,k,iice,13) + nrcoll(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,14) = diag_ice_2mom_liqfrac(i,k,iice,14) + nccoll(iice)*dt
+               diag_ice_2mom_liqfrac(i,k,iice,15) = diag_ice_2mom_liqfrac(i,k,iice,15) + nifrz(iice)*dt
           END DO
        endif
-       if (present(ice_diag_3mom)) then
+       if (present(diag_ice_3mom)) then
           DO iice = 1,nCat
-             ice_diag_3mom(i,k,iice,1) = ice_diag_3mom(i,k,iice,1) + zidep(iice)
-             ice_diag_3mom(i,k,iice,2) = ice_diag_3mom(i,k,iice,2) + zisub(iice)
-             ice_diag_3mom(i,k,iice,3) = ice_diag_3mom(i,k,iice,3) + zimlt(iice)
-             ice_diag_3mom(i,k,iice,4) = ice_diag_3mom(i,k,iice,4) + zislf(iice)
-             ice_diag_3mom(i,k,iice,5) = ice_diag_3mom(i,k,iice,5) + zishd(iice)
-             ice_diag_3mom(i,k,iice,6) = ice_diag_3mom(i,k,iice,6) + zqccol(iice)
-             ice_diag_3mom(i,k,iice,7) = ice_diag_3mom(i,k,iice,7) + zqrcol(iice)
+             diag_ice_3mom(i,k,iice,1) = diag_ice_3mom(i,k,iice,1) + zidep(iice)
+             diag_ice_3mom(i,k,iice,2) = diag_ice_3mom(i,k,iice,2) + zisub(iice)
+             diag_ice_3mom(i,k,iice,3) = diag_ice_3mom(i,k,iice,3) + zimlt(iice)
+             diag_ice_3mom(i,k,iice,4) = diag_ice_3mom(i,k,iice,4) + zislf(iice)
+             diag_ice_3mom(i,k,iice,5) = diag_ice_3mom(i,k,iice,5) + zishd(iice)
+             diag_ice_3mom(i,k,iice,6) = diag_ice_3mom(i,k,iice,6) + zqccol(iice)
+             diag_ice_3mom(i,k,iice,7) = diag_ice_3mom(i,k,iice,7) + zqrcol(iice)
           END DO
        endif
 !! << JM_20260407
@@ -4944,9 +4935,7 @@ call cpu_time(timer_start(3))
                     qccoll(iice)-qwgrth1c(iice)-qcmul(iice)+qcmul_ffd_rim(iice))*dt                         ! JM_20260623: adding qcmul_ffd_rim(iice) from Phillips FFD parameterization
           nc(i,k) = nc(i,k) + (-nccol(iice)-nchetc(iice)-ncheti(iice)-nccoll(iice)+ncmul_ffd_rim(iice))*dt  ! JM_20260623: adding ncmul_ffd_rim(iice) from Phillips FFD parameterization
           qr(i,k) = qr(i,k) + (-qrcol(iice)+qrmlt(iice)-qrhetc(iice)-qrheti(iice)+       &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                    -qimul_ffd_frz(iice)-qimul_ffd_imm(iice)-qimul_ffd_rim(iice)+        &
-!! << JM_20260619
+                    -qimul_ffd_imm(iice)-qimul_ffd_rim(iice)-qcmul_ffd_rim(iice)+        &                  ! JM_20260623: adding qimul_ffd_imm(iice), qimul_ffd_rim(iice) AND qcmul_ffd_rim(iice) from Phillips FFD parameterization
                     qcshd(iice)-qrmul(iice)-qrcoll(iice)+qlshd(iice)-qwgrth1r(iice))*dt
 
         ! apply factor to source for rain number from melting of ice, (ad-hoc
@@ -4968,30 +4957,31 @@ call cpu_time(timer_start(3))
              qitot(i,k,iice) = qitot(i,k,iice) - (qisub(iice)+qrmlt(iice))*dt
          ! endif
 
+         !! JM_20260723: I dont understand the following here:
+         !                 - why is SIP (qrmul & qcmul) added to qirim and birim?
+         !                 - why is immersion freezing added to qirim and birim?
+         !                 - why is contact freezing added to qirim and birim? because it can be understand as an accretion process?
+         !                 - why is qifrz only added to qirim and birim and not to qitot?
+         !                 - why is qwgrth1c and qwgrth1r added to qitot AND qiliq? Shouldn't it be substracted from qiliq?
+
           tmp1             = (qrcol(iice)+qccol(iice)+qrhetc(iice)+qrheti(iice)+         &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                            qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
-!! << JM_20260619
+                            qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+                     & ! JM_20260727: adding qimul_ffd_imm(iice) and qimul_ffd_rim(iice) from Phillips FFD parameterization
                             qchetc(iice)+qcheti(iice)+qrmul(iice)+qcmul(iice))*dt
           qitot(i,k,iice) = qitot(i,k,iice) + (qidep(iice)+qinuc(iice)-qlshd(iice)-      &
                             qlevp(iice)+qlcon(iice)+qwgrth1c(iice)+qwgrth1r(iice)+       &
                             qrcoll(iice)+qccoll(iice))*dt + tmp1
-          qirim(i,k,iice) = qirim(i,k,iice) + qifrz(iice)*dt + tmp1
-          birim(i,k,iice) = birim(i,k,iice) + ((qifrz(iice)+qrcol(iice))*                &
+          qirim(i,k,iice) = qirim(i,k,iice) + (qifrz(iice)+qimul_ffd_frz(iice))*dt + tmp1  ! JM_20260727: adding qimul_ffd_frz(iice) from Phillips FFD parameterization
+          birim(i,k,iice) = birim(i,k,iice) + ((qifrz(iice)+qrcol(iice)+                 &
+                            +qimul_ffd_frz(iice)+qimul_ffd_rim(iice))*                   & ! JM_20260727: adding qimul_ffd_frz(iice) from Phillips FFD parameterization
                             i_rho_rimeMax+(qccol(iice)+qcmul(iice))/rhorime_c(iice)+     &
                             (qrhetc(iice)+qrheti(iice)+qchetc(iice)+qcheti(iice)+        &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                            qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
-!! << JM_20260619
-                            qrmul(iice))*i_rho_rimeMax)*dt
+                            qrmul(iice)+qimul_ffd_imm(iice))*i_rho_rimeMax)*dt
           qiliq(i,k,iice) = qiliq(i,k,iice) + (qrcoll(iice)+qccoll(iice)-qifrz(iice)-    &
                             qlshd(iice)+qlcon(iice)-qlevp(iice)+qwgrth1c(iice)+          &
-                            qwgrth1r(iice))*dt
+                            qwgrth1r(iice)-qimul_ffd_frz(iice))*dt                         ! JM_20260727: adding qimul_ffd_frz(iice) from Phillips FFD parameterization
           nitot(i,k,iice) = nitot(i,k,iice) + (ninuc(iice)-nimlt(iice)-nisub(iice)-      &
                             nislf(iice)+nrhetc(iice)+nrheti(iice)+nchetc(iice)+          &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                            nimul_ffd_frz(iice)+nimul_ffd_imm(iice)+nimul_ffd_rim(iice)+ &
-!! << JM_20260619
+                            nimul_ffd_imm(iice)+nimul_ffd_rim(iice)+nimul_ffd_frz(iice)+ & ! JM_20260727: adding nimul_ffd_imm(iice), nimul_ffd_rim(iice) and nimul_ffd_frz(iice) from Phillips FFD parameterization
                             ncheti(iice)+nimul(iice)-nlevp(iice))*dt
 
           if (nCat.gt.1) then
@@ -5055,10 +5045,8 @@ call cpu_time(timer_start(3))
           th(i,k) = th(i,k) + i_exn(i,k)*((qidep(iice)-qisub(iice)+qinuc(iice))*         &
                               xxls(i,k)*i_cpv+(qrcol(iice)+qccol(iice)+qchetc(iice)+     &
                               qcheti(iice)+qrhetc(iice)+qrheti(iice)+qcmul(iice)+        &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                              qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
-!! << JM_20260619
-                              qrmul(iice)-qrmlt(iice)-qimlt(iice)+qifrz(iice))*          &
+                              qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &                              ! JM_20260727: adding qimul_ffd_imm(iice) and qimul_ffd_rim(iice) from Phillips FFD parameterization
+                              qrmul(iice)-qrmlt(iice)-qimlt(iice)+qifrz(iice)+qimul_ffd_frz(iice))* & ! JM_20260727: adding qimul_ffd_frz(iice) from Phillips FFD parameterization
                               xlf(i,k)*i_cpv+(qlcon(iice)-qlevp(iice))*xxlv(i,k)*i_cpv)*dt
 
        enddo iice_loop3
@@ -5066,7 +5054,7 @@ call cpu_time(timer_start(3))
    !-- warm-phase only processes:
        qc(i,k) = qc(i,k) + (-qcacc-qcaut+qcnuc+qccon-qcevp)*dt
        qr(i,k) = qr(i,k) + (qcacc+qcaut+qrcon-qrevp)*dt
-       nc(i,k) = nc(i,k) + (-ncacc-ncautc+ncslf+ncnuc)*dt
+       nc(i,k) = nc(i,k) + (-ncacc-ncautc+ncslf+ncnuc)*dt ! JM note: why is ncslf not a sink term and substracted here?
        nr(i,k) = nr(i,k) + dt*merge((0.5*ncautc-nrslf-nrevp), (ncautr-nrslf-nrevp),      &
                                     autoAccr_param.eq.1)
 
@@ -5134,29 +5122,17 @@ call cpu_time(timer_start(3))
 ! include all processes **except** group 2 processes which are added later below
 ! thus, all group 2 processes are subtracted from the ice variables below
           dumqi = qitot(i,k,iice) - (qinuc(iice)+qrhetc(iice)+qrheti(iice)+qchetc(iice)+ &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                                     qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
-!! << JM_20260619
                                      qcheti(iice)+qrmul(iice)+qcmul(iice))*dt
           dumql = qiliq(i,k,iice)
 
           if ((dumqi-dumql).ge.qsmall) then
 
              dumni = nitot(i,k,iice) - (ninuc(iice)+nrhetc(iice)+nrheti(iice)+           &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                                        nimul_ffd_frz(iice)+nimul_ffd_imm(iice)+nimul_ffd_rim(iice)+      &
-!! << JM_20260619
                                         nchetc(iice)+ncheti(iice)+nimul(iice))*dt
              dumzi = zitot(i,k,iice)
              dumqr = qirim(i,k,iice) - (qrhetc(iice)+qrheti(iice)+qchetc(iice)+          &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                                        qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
-!! << JM_20260619
                                         qcheti(iice)+qrmul(iice)+qcmul(iice))*dt
              dumbi = birim(i,k,iice) - (qrhetc(iice)+qrheti(iice)+qchetc(iice)+          &
-!! JM_20260619 >> adding multiple multiplication processes (immersion freezing, refreezing and rime splintering)
-                                        qimul_ffd_frz(iice)+qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+ &
-!! << JM_20260619
                                         qcheti(iice)+qrmul(iice)+qcmul(iice))*i_rho_rimeMax*dt
 
              dumni = max(dumni,nsmall)
@@ -5443,6 +5419,11 @@ call cpu_time(timer_end(6))
           nc(i,k) = max(nc(i,k),nsmall)
           N_nuc = nc(i,k)
 
+!! JM_20260727: adding diagnostics for homogeneous freezing of cloud water
+          diag_ice_2mom(i,k,iice,36) = diag_ice_2mom(i,k,iice,36) + Q_nuc
+          diag_ice_2mom(i,k,iice,37) = diag_ice_2mom(i,k,iice,37) + N_nuc
+!! << JM_20260727
+
           if (nCat>1) then
              !determine destination ice-phase category:
              dum1  = 900.     !density of new ice
@@ -5456,7 +5437,7 @@ call cpu_time(timer_end(6))
 
           qirim(i,k,iice_dest) = qirim(i,k,iice_dest) + Q_nuc
           qitot(i,k,iice_dest) = qitot(i,k,iice_dest) + Q_nuc
-          birim(i,k,iice_dest) = birim(i,k,iice_dest) + Q_nuc*i_rho_rimeMax
+          birim(i,k,iice_dest) = birim(i,k,iice_dest) + Q_nuc*i_rho_rimeMax ! JM note: why is not rhorime_c used here?
           nitot(i,k,iice_dest) = nitot(i,k,iice_dest) + N_nuc
          !Z-tendency for triple-moment ice
          !  note:  this could be optimized by moving this conditional block outside of loop k_loop_fz
@@ -5481,6 +5462,12 @@ call cpu_time(timer_end(6))
           Q_nuc = qr(i,k)
           nr(i,k) = max(nr(i,k),nsmall)
           N_nuc = nr(i,k)
+
+!! JM_20260727: adding diagnostics for homogeneous freezing of raindrops
+          diag_ice_2mom(i,k,iice,38) = diag_ice_2mom(i,k,iice,38) + Q_nuc
+          diag_ice_2mom(i,k,iice,39) = diag_ice_2mom(i,k,iice,39) + N_nuc
+!! << JM_20260727
+
           if (nCat>1) then
              !determine destination ice-phase category:
              dum1  = 900.     !density of new ice

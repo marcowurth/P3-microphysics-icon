@@ -3,22 +3,25 @@ MODULE p3plugin_main_routines
   USE comin_plugin_interface,  ONLY : comin_descrdata_get_cell_indices
 
   USE p3plugin_types,          ONLY : t_dyn_vars_3dptr, t_mp_vars_3dptr, t_p3_vars_3dptr,                      &
-    &                                 t_icon_tracer_3dptr, t_p3_tracer_3dptr
+    &                                 t_icon_tracer_3dptr, t_p3_tracer_3dptr,                                  &
+!! JM_20260407 >> new comin handle and pointer for 2-moment warm-phase, ice-phase, ice-ice collision, ice-liquid and 3-moment ice-phase diagnostics
+                                      t_p3_diag_wrm_2mom_3dptr, t_p3_diag_ice_2mom_3dptr,                      &
+                                      t_p3_diag_ice_2mom_coll_3dptr, t_p3_diag_ice_2mom_liqfrac_3dptr,         &
+                                      t_p3_diag_ice_3mom_3dptr
+!! << JM_20260407
   USE p3plugin_global_vars,    ONLY : rank_world, fastphystep, n_icecat, l3mom_ice, lliqfrac, dtime, p_global, &
-    &                                 p_patch, dyn_vars, mp_vars, p3_vars, icon_tracer, p3_tracer
-!! JM_20260629 >> adding n_inact as argument for depletion of INPs
-  USE p3plugin_global_vars,    ONLY : n_inact
+    &                                 p_patch, dyn_vars, mp_vars, p3_vars, icon_tracer, p3_tracer,             &
+!! JM_20260629 >> - use diagnostic handles, number of diagnostics and diagnostic array
+!!                - adding n_inact as argument for depletion of INPs
+                                      p3_diag_wrm_2mom, p3_diag_ice_2mom, p3_diag_ice_2mom_coll, p3_diag_ice_2mom_liqfrac, p3_diag_ice_3mom, &
+                                      n_diag_wrm_2mom, n_diag_ice_2mom, n_diag_ice_2mom_coll, n_diag_ice_2mom_liqfrac, n_diag_ice_3mom, &
+                                      diag_wrm_2mom, diag_ice_2mom, diag_ice_2mom_coll, diag_ice_2mom_liqfrac, diag_ice_3mom, &
+                                      n_inact
 !! << JM_20260629
   USE p3plugin_utils,          ONLY : print_global_max
 
   USE microphy_p3,             ONLY : p3_main
 
-!! JM_20260407 >> using new comin handle and pointer for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-  USE p3plugin_types,          ONLY : t_p3_ice_diag_2mom_3dptr, t_p3_ice_diag_2mom_coll_3dptr, t_p3_ice_diag_2mom_liqfrac_3dptr, &
-                                      t_p3_ice_diag_3mom_3dptr
-  USE p3plugin_global_vars,    ONLY : p3_ice_diag_2mom, p3_ice_diag_2mom_coll, p3_ice_diag_2mom_liqfrac, &
-                                      p3_ice_diag_3mom
-!! << JM_20260407
 
   IMPLICIT NONE
   PRIVATE
@@ -37,8 +40,7 @@ CONTAINS
     INTEGER :: i_icecat, jg, jk, jb
     INTEGER :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
     INTEGER :: n_diag_2d, n_diag_3d
-!! JM_20260407 >> adding new integer for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-    INTEGER :: n_diag_2mom, n_diag_2mom_coll, n_diag_2mom_liqfrac, n_diag_3mom
+!! JM_20260407 defining dummy integer for ice-ice collision diagnostics
     INTEGER :: catcoll
 !! << JM_20260407
 
@@ -47,11 +49,12 @@ CONTAINS
     TYPE(t_p3_vars_3dptr)     :: p3_vars_3d(n_icecat)
     TYPE(t_icon_tracer_3dptr) :: icon_tracer_3d
     TYPE(t_p3_tracer_3dptr)   :: p3_tracer_3d(n_icecat)
-!! JM_20260407 >> adding new comin pointer for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-    TYPE(t_p3_ice_diag_2mom_3dptr)         :: p3_ice_diag_2mom_3d(n_icecat)
-    TYPE(t_p3_ice_diag_2mom_coll_3dptr)    :: p3_ice_diag_2mom_coll_3d(n_icecat, n_icecat)
-    TYPE(t_p3_ice_diag_2mom_liqfrac_3dptr) :: p3_ice_diag_2mom_liqfrac_3d(n_icecat)
-    TYPE(t_p3_ice_diag_3mom_3dptr)         :: p3_ice_diag_3mom_3d(n_icecat)
+!! JM_20260407 >> adding new comin pointer for 2-moment warm-phase, 2-moment ice-phase, 2-moment ice-ice collision, 2-moment ice-liquid and 3-moment ice-phase diagnostics
+    TYPE(t_p3_diag_wrm_2mom_3dptr)         :: p3_diag_wrm_2mom_3d
+    TYPE(t_p3_diag_ice_2mom_3dptr)         :: p3_diag_ice_2mom_3d(n_icecat)
+    TYPE(t_p3_diag_ice_2mom_coll_3dptr)    :: p3_diag_ice_2mom_coll_3d(n_icecat, n_icecat)
+    TYPE(t_p3_diag_ice_2mom_liqfrac_3dptr) :: p3_diag_ice_2mom_liqfrac_3d(n_icecat)
+    TYPE(t_p3_diag_ice_3mom_3dptr)         :: p3_diag_ice_3mom_3d(n_icecat)
 !! << JM_20260407
 
     REAL :: dz_3d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks)
@@ -90,12 +93,6 @@ CONTAINS
     REAL :: dummysum(p_global%nproma, p_patch%nlev, p_patch%cells%nblks)
     REAL, ALLOCATABLE :: diag_2d(:,:,:)
     REAL, ALLOCATABLE :: diag_3d(:,:,:,:)
-!! JM_20260407 >> adding new array for 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-    REAL, ALLOCATABLE :: ice_diag_2mom(:,:,:,:,:)
-    REAL, ALLOCATABLE :: ice_diag_2mom_coll(:,:,:,:,:,:)
-    REAL, ALLOCATABLE :: ice_diag_2mom_liqfrac(:,:,:,:,:)
-    REAL, ALLOCATABLE :: ice_diag_3mom(:,:,:,:,:)
-!! << JM_20260407
 
     REAL :: Rd, c_pd
     REAL :: clbfact_dep = 1.0
@@ -131,15 +128,6 @@ CONTAINS
     CALL mp_vars%dhmax%to_3d(mp_vars_3d%dhmax)
     CALL mp_vars%dhmax_ground%to_3d(mp_vars_3d%dhmax_ground)
     CALL mp_vars%ze_p3%to_3d(mp_vars_3d%ze_p3)
-!! JM_20260323 >> adding warm-rain diagnostics
-    CALL mp_vars%d_qcnuc%to_3d(mp_vars_3d%d_qcnuc)
-    CALL mp_vars%d_qccon%to_3d(mp_vars_3d%d_qccon)
-    CALL mp_vars%d_qrcon%to_3d(mp_vars_3d%d_qrcon)
-    CALL mp_vars%d_qcevp%to_3d(mp_vars_3d%d_qcevp)
-    CALL mp_vars%d_qrevp%to_3d(mp_vars_3d%d_qrevp)
-    CALL mp_vars%d_qcacc%to_3d(mp_vars_3d%d_qcacc)
-    CALL mp_vars%d_qcaut%to_3d(mp_vars_3d%d_qcaut)
-!! << JM_20260323
     CALL mp_vars%prec_gsp_rate%to_3d(mp_vars_3d%prec_gsp_rate)
     CALL mp_vars%rain_gsp_rate%to_3d(mp_vars_3d%rain_gsp_rate)
     CALL mp_vars%snow_gsp_rate%to_3d(mp_vars_3d%snow_gsp_rate)
@@ -155,6 +143,17 @@ CONTAINS
     CALL icon_tracer%qi%to_3d(icon_tracer_3d%qi)
     CALL icon_tracer%qnc%to_3d(icon_tracer_3d%qnc)
     CALL icon_tracer%qnr%to_3d(icon_tracer_3d%qnr)
+
+!! JM_20260323 >> extracting warm-phase 2-moment diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
+    CALL p3_diag_wrm_2mom%d_qcnuc%to_3d(p3_diag_wrm_2mom_3d%d_qcnuc)
+    CALL p3_diag_wrm_2mom%d_qccon%to_3d(p3_diag_wrm_2mom_3d%d_qccon)
+    CALL p3_diag_wrm_2mom%d_qrcon%to_3d(p3_diag_wrm_2mom_3d%d_qrcon)
+    CALL p3_diag_wrm_2mom%d_qcevp%to_3d(p3_diag_wrm_2mom_3d%d_qcevp)
+    CALL p3_diag_wrm_2mom%d_qrevp%to_3d(p3_diag_wrm_2mom_3d%d_qrevp)
+    CALL p3_diag_wrm_2mom%d_qcacc%to_3d(p3_diag_wrm_2mom_3d%d_qcacc)
+    CALL p3_diag_wrm_2mom%d_qcaut%to_3d(p3_diag_wrm_2mom_3d%d_qcaut)
+!! << JM_20260323
+
     DO i_icecat = 1, n_icecat
       CALL p3_tracer(i_icecat)%qitot%to_3d(p3_tracer_3d(i_icecat)%qitot)
       CALL p3_tracer(i_icecat)%qnitot%to_3d(p3_tracer_3d(i_icecat)%qnitot)
@@ -162,39 +161,35 @@ CONTAINS
       CALL p3_tracer(i_icecat)%birim%to_3d(p3_tracer_3d(i_icecat)%birim)
       IF (l3mom_ice) THEN
         CALL p3_tracer(i_icecat)%qzitot%to_3d(p3_tracer_3d(i_icecat)%qzitot)
-!! JM_20260407 >> extracting ice-phase 3moment diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
-        CALL p3_ice_diag_3mom(i_icecat)%d_zidep_%to_3d(p3_ice_diag_3mom_3d(i_icecat)%d_zidep_)
-        CALL p3_ice_diag_3mom(i_icecat)%d_zisub_%to_3d(p3_ice_diag_3mom_3d(i_icecat)%d_zisub_)
-        CALL p3_ice_diag_3mom(i_icecat)%d_zimlt_%to_3d(p3_ice_diag_3mom_3d(i_icecat)%d_zimlt_)
-        CALL p3_ice_diag_3mom(i_icecat)%d_zislf_%to_3d(p3_ice_diag_3mom_3d(i_icecat)%d_zislf_)
-        CALL p3_ice_diag_3mom(i_icecat)%d_zishd_%to_3d(p3_ice_diag_3mom_3d(i_icecat)%d_zishd_)
-        CALL p3_ice_diag_3mom(i_icecat)%d_zqccol_%to_3d(p3_ice_diag_3mom_3d(i_icecat)%d_zqccol_)
-        CALL p3_ice_diag_3mom(i_icecat)%d_zqrcol_%to_3d(p3_ice_diag_3mom_3d(i_icecat)%d_zqrcol_)
+!! JM_20260407 >> extracting ice-phase 3-moment diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
+        CALL p3_diag_ice_3mom(i_icecat)%d_zidep_%to_3d(p3_diag_ice_3mom_3d(i_icecat)%d_zidep_)
+        CALL p3_diag_ice_3mom(i_icecat)%d_zisub_%to_3d(p3_diag_ice_3mom_3d(i_icecat)%d_zisub_)
+        CALL p3_diag_ice_3mom(i_icecat)%d_zimlt_%to_3d(p3_diag_ice_3mom_3d(i_icecat)%d_zimlt_)
+        CALL p3_diag_ice_3mom(i_icecat)%d_zislf_%to_3d(p3_diag_ice_3mom_3d(i_icecat)%d_zislf_)
+        CALL p3_diag_ice_3mom(i_icecat)%d_zishd_%to_3d(p3_diag_ice_3mom_3d(i_icecat)%d_zishd_)
+        CALL p3_diag_ice_3mom(i_icecat)%d_zqccol_%to_3d(p3_diag_ice_3mom_3d(i_icecat)%d_zqccol_)
+        CALL p3_diag_ice_3mom(i_icecat)%d_zqrcol_%to_3d(p3_diag_ice_3mom_3d(i_icecat)%d_zqrcol_)
 !! << JM_20260407
       ENDIF
       IF (lliqfrac) THEN
         CALL p3_tracer(i_icecat)%qiliq%to_3d(p3_tracer_3d(i_icecat)%qiliq)
-!! JM_20260407 >> extracting 2mom ice-liquid diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qimlt_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qimlt_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qwgrth1_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qwgrth1_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qwgrth1c_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qwgrth1c_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qwgrth1r_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qwgrth1r_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qlshd_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qlshd_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qlcon_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qlcon_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qlevp_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qlevp_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qifrz_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qifrz_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qccoll_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qccoll_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_qrcoll_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qrcoll_)
+!! JM_20260407 >> extracting 2-moment ice-liquid diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qimlt_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qimlt_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qwgrth1_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qwgrth1_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qwgrth1c_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qwgrth1c_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qwgrth1r_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qwgrth1r_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qlshd_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qlshd_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qlcon_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qlcon_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qlevp_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qlevp_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qifrz_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qifrz_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qccoll_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qccoll_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_qrcoll_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qrcoll_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_nlshd_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nlshd_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_nlevp_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nlevp_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_nrcoll_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nrcoll_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_nccoll_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nccoll_)
+        CALL p3_diag_ice_2mom_liqfrac(i_icecat)%d_nifrz_%to_3d(p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nifrz_)
 !! << JM_20260407
-!! JM_20260415 >> extracting 2mom ice-liquid number concentration diagnostics
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_nlshd_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nlshd_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_nlevp_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nlevp_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_nrcoll_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nrcoll_)
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_nccoll_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nccoll_)
-!! << JM_20260415
-!! JM_20260708
-        CALL p3_ice_diag_2mom_liqfrac(i_icecat)%d_nifrz_%to_3d(p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nifrz_)
-!! JM_20260708
       ENDIF
 
       CALL p3_vars(i_icecat)%dmean_i%to_3d(p3_vars_3d(i_icecat)%dmean_i)
@@ -202,51 +197,51 @@ CONTAINS
       CALL p3_vars(i_icecat)%rho_i%to_3d(p3_vars_3d(i_icecat)%rho_i)
       CALL p3_vars(i_icecat)%vm_i%to_3d(p3_vars_3d(i_icecat)%vm_i)
 
-!! JM_20260407 >> extracting 2mom ice-phase diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qidep_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qidep_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qisub_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qisub_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qinuc_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qinuc_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qchetc_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qchetc_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qcheti_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qcheti_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qrhetc_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qrhetc_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qrheti_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qrheti_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qrmlt_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qrmlt_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qccol_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qccol_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qrcol_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qrcol_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qwgrth_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qwgrth_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qcshd_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qcshd_)
-!! JM_20260415 >> adding number concentration diagnostics
-      CALL p3_ice_diag_2mom(i_icecat)%d_nccol_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nccol_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nrcol_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nrcol_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_ninuc_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_ninuc_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nimlt_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nimlt_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nisub_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nisub_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nislf_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nislf_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nchetc_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nchetc_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_ncheti_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_ncheti_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nrhetc_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nrhetc_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nrheti_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nrheti_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nrshdr_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nrshdr_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_ncshdc_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_ncshdc_)
-!! << JM_20260415
-      CALL p3_ice_diag_2mom(i_icecat)%d_qcmul_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qcmul_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qrmul_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qrmul_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nimul_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nimul_)
+!! JM_20260407 >> extracting 2-moment ice-phase diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qidep_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qidep_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qisub_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qisub_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qinuc_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qinuc_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qchetc_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qchetc_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qcheti_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qcheti_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qrhetc_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qrhetc_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qrheti_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qrheti_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qrmlt_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qrmlt_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qccol_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qccol_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qrcol_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qrcol_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qwgrth_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qwgrth_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qcshd_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qcshd_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nccol_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nccol_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nrcol_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nrcol_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_ninuc_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_ninuc_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nimlt_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nimlt_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nisub_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nisub_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nislf_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nislf_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nchetc_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nchetc_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_ncheti_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_ncheti_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nrhetc_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nrhetc_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nrheti_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nrheti_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nrshdr_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nrshdr_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_ncshdc_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_ncshdc_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qchom_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qchom_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nchom_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nchom_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qrhom_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qrhom_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nrhom_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nrhom_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qcmul_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qcmul_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qrmul_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qrmul_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nimul_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nimul_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qimul_ffd_frz_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qimul_ffd_frz_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nimul_ffd_frz_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nimul_ffd_frz_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qimul_ffd_imm_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qimul_ffd_imm_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nimul_ffd_imm_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nimul_ffd_imm_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qimul_ffd_rim_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qimul_ffd_rim_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_nimul_ffd_rim_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_nimul_ffd_rim_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_qcmul_ffd_rim_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_qcmul_ffd_rim_)
+      CALL p3_diag_ice_2mom(i_icecat)%d_ncmul_ffd_rim_%to_3d(p3_diag_ice_2mom_3d(i_icecat)%d_ncmul_ffd_rim_)
 !! << JM_20260407
-!! JM_20260619 >> adding SIP processes (ffd during refreezing, immersion freezing and riming)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qimul_ffd_frz_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qimul_ffd_frz_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nimul_ffd_frz_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nimul_ffd_frz_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qimul_ffd_imm_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qimul_ffd_imm_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nimul_ffd_imm_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nimul_ffd_imm_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qimul_ffd_rim_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qimul_ffd_rim_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_nimul_ffd_rim_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_nimul_ffd_rim_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_qcmul_ffd_rim_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_qcmul_ffd_rim_)
-      CALL p3_ice_diag_2mom(i_icecat)%d_ncmul_ffd_rim_%to_3d(p3_ice_diag_2mom_3d(i_icecat)%d_ncmul_ffd_rim_)
-!! << JM_20260619
-!! JM_20260407 >> extracting 2mom ice-ice collisions diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
+!! JM_20260407 >> extracting 2-moment ice-ice collisions diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
       DO catcoll = 1, n_icecat
          if (i_icecat .ne. catcoll) then
-           CALL p3_ice_diag_2mom_coll(i_icecat, catcoll)%d_qicol_%to_3d(p3_ice_diag_2mom_coll_3d(i_icecat, catcoll)%d_qicol_)
+           CALL p3_diag_ice_2mom_coll(i_icecat, catcoll)%d_qicol_%to_3d(p3_diag_ice_2mom_coll_3d(i_icecat, catcoll)%d_qicol_)
          END IF
       END DO
 !! << JM_20260407
@@ -254,19 +249,9 @@ CONTAINS
 
 
     n_diag_2d = 1  ! not used
-    n_diag_3d = 9  ! diag_3d contains dmean_c, dmean_r, .... JM: changed from 2-->9
+    n_diag_3d = 2  ! diag_3d contains dmean_c, dmean_r, ....
     ALLOCATE(diag_2d(p_global%nproma, p_patch%cells%nblks, n_diag_2d))
     ALLOCATE(diag_3d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_diag_3d))
-!! JM_20260407 >> integer for defining 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostics
-    n_diag_2mom = 35
-    ALLOCATE(ice_diag_2mom(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_diag_2mom))
-    n_diag_2mom_coll = 1
-    ALLOCATE(ice_diag_2mom_coll(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_icecat, n_diag_2mom_coll))
-    n_diag_2mom_liqfrac = 14
-    ALLOCATE(ice_diag_2mom_liqfrac(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_diag_2mom_liqfrac))
-    n_diag_3mom = 7
-    ALLOCATE(ice_diag_3mom(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_icecat, n_diag_3mom))
-!! << JM_20260407
 
     Rd   = 287.04
     c_pd = Rd * 3.5
@@ -281,12 +266,6 @@ CONTAINS
     diag_rhoi_4d(:,:,:,:) = 0.0
     diag_dhmax_4d(:,:,:,:) = 0.0
     diag_3d(:,:,:,:)  = 0.0
-!! JM_20260407 >> initializing 2moment ice-phase, 2mom ice-ice collision, 2mom ice-liquid and 3mom ice-phase diagnostic array
-    ice_diag_2mom(:,:,:,:,:) = 0.0
-    ice_diag_2mom_coll(:,:,:,:,:,:) = 0.0
-    ice_diag_2mom_liqfrac(:,:,:,:,:) = 0.0
-    ice_diag_3mom(:,:,:,:,:) = 0.0
-!! << JM_20260407
 
     ! calc theta, pres and w on full levels
     dyn_vars_3d%pres = dyn_vars_3d%rho * dyn_vars_3d%temp * Rd
@@ -405,14 +384,16 @@ CONTAINS
                    n_inact        = n_inact(i_startidx:i_endidx, 1:p_patch%nlev, jb),                     &
 !! << JM_20260629
 !! JM_20260407 >> adding new variables to the p3_main call
-                   n_diag_2mom         = n_diag_2mom,                                                     &
-                   n_diag_2mom_coll    = n_diag_2mom_coll,                                                &
-                   n_diag_2mom_liqfrac = n_diag_2mom_liqfrac,                                             &
-                   n_diag_3mom         = n_diag_3mom,                                                     &
-                   ice_diag_2mom       = ice_diag_2mom(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat, 1:n_diag_2mom), &
-                   ice_diag_2mom_coll  = ice_diag_2mom_coll(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat, 1:n_icecat, 1:n_diag_2mom_coll), &
-                   ice_diag_2mom_liqfrac = ice_diag_2mom_liqfrac(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat, 1:n_diag_2mom_liqfrac), &
-                   ice_diag_3mom       = ice_diag_3mom(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat, 1:n_diag_3mom) &
+                   n_diag_wrm_2mom         = n_diag_wrm_2mom,                                             &
+                   n_diag_ice_2mom         = n_diag_ice_2mom,                                             &
+                   n_diag_ice_2mom_coll    = n_diag_ice_2mom_coll,                                        &
+                   n_diag_ice_2mom_liqfrac = n_diag_ice_2mom_liqfrac,                                     &
+                   n_diag_ice_3mom         = n_diag_ice_3mom,                                             &
+                   diag_wrm_2mom           = diag_wrm_2mom(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_diag_wrm_2mom), &
+                   diag_ice_2mom           = diag_ice_2mom(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat, 1:n_diag_ice_2mom), &
+                   diag_ice_2mom_coll      = diag_ice_2mom_coll(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat, 1:n_icecat, 1:n_diag_ice_2mom_coll), &
+                   diag_ice_2mom_liqfrac   = diag_ice_2mom_liqfrac(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat, 1:n_diag_ice_2mom_liqfrac), &
+                   diag_ice_3mom           = diag_ice_3mom(i_startidx:i_endidx, 1:p_patch%nlev, jb, 1:n_icecat, 1:n_diag_ice_3mom) &
 !! << JM_20260407
                    )
     END DO
@@ -431,39 +412,35 @@ CONTAINS
       p3_tracer_3d(i_icecat)%birim = birim_4d(:,:,:,i_icecat)
       IF (l3mom_ice) THEN
         p3_tracer_3d(i_icecat)%qzitot = qzitot_4d(:,:,:,i_icecat)
-!! JM_20260407 >> store computed 3mom ice-phase diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
-        p3_ice_diag_3mom_3d(i_icecat)%d_zidep_ = ice_diag_3mom(:,:,:,i_icecat,1)
-        p3_ice_diag_3mom_3d(i_icecat)%d_zisub_ = ice_diag_3mom(:,:,:,i_icecat,2)
-        p3_ice_diag_3mom_3d(i_icecat)%d_zimlt_ = ice_diag_3mom(:,:,:,i_icecat,3)
-        p3_ice_diag_3mom_3d(i_icecat)%d_zislf_ = ice_diag_3mom(:,:,:,i_icecat,4)
-        p3_ice_diag_3mom_3d(i_icecat)%d_zishd_ = ice_diag_3mom(:,:,:,i_icecat,5)
-        p3_ice_diag_3mom_3d(i_icecat)%d_zqccol_= ice_diag_3mom(:,:,:,i_icecat,6)
-        p3_ice_diag_3mom_3d(i_icecat)%d_zqrcol_= ice_diag_3mom(:,:,:,i_icecat,7)
+!! JM_20260407 >> store computed 3-moment ice-phase diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
+        p3_diag_ice_3mom_3d(i_icecat)%d_zidep_ = diag_ice_3mom(:,:,:,i_icecat,1)
+        p3_diag_ice_3mom_3d(i_icecat)%d_zisub_ = diag_ice_3mom(:,:,:,i_icecat,2)
+        p3_diag_ice_3mom_3d(i_icecat)%d_zimlt_ = diag_ice_3mom(:,:,:,i_icecat,3)
+        p3_diag_ice_3mom_3d(i_icecat)%d_zislf_ = diag_ice_3mom(:,:,:,i_icecat,4)
+        p3_diag_ice_3mom_3d(i_icecat)%d_zishd_ = diag_ice_3mom(:,:,:,i_icecat,5)
+        p3_diag_ice_3mom_3d(i_icecat)%d_zqccol_= diag_ice_3mom(:,:,:,i_icecat,6)
+        p3_diag_ice_3mom_3d(i_icecat)%d_zqrcol_= diag_ice_3mom(:,:,:,i_icecat,7)
 !! << JM_20260407
       ENDIF
       IF (lliqfrac) THEN
         p3_tracer_3d(i_icecat)%qiliq = qiliq_4d(:,:,:,i_icecat)
-!! JM_20260407 >> store computed 2mom ice-liquid diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qimlt_    = ice_diag_2mom_liqfrac(:,:,:,i_icecat,1)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qwgrth1_  = ice_diag_2mom_liqfrac(:,:,:,i_icecat,2)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qwgrth1c_ = ice_diag_2mom_liqfrac(:,:,:,i_icecat,3)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qwgrth1r_ = ice_diag_2mom_liqfrac(:,:,:,i_icecat,4)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qlshd_    = ice_diag_2mom_liqfrac(:,:,:,i_icecat,5)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qlcon_    = ice_diag_2mom_liqfrac(:,:,:,i_icecat,6)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qlevp_    = ice_diag_2mom_liqfrac(:,:,:,i_icecat,7)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qifrz_    = ice_diag_2mom_liqfrac(:,:,:,i_icecat,8)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qccoll_   = ice_diag_2mom_liqfrac(:,:,:,i_icecat,9)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_qrcoll_   = ice_diag_2mom_liqfrac(:,:,:,i_icecat,10)
+!! JM_20260407 >> store computed 2-moment ice-liquid diagnostics to 3D working arrays (need to be adjusted here when adding more diagnostics)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qimlt_    = diag_ice_2mom_liqfrac(:,:,:,i_icecat,1)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qwgrth1_  = diag_ice_2mom_liqfrac(:,:,:,i_icecat,2)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qwgrth1c_ = diag_ice_2mom_liqfrac(:,:,:,i_icecat,3)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qwgrth1r_ = diag_ice_2mom_liqfrac(:,:,:,i_icecat,4)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qlshd_    = diag_ice_2mom_liqfrac(:,:,:,i_icecat,5)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qlcon_    = diag_ice_2mom_liqfrac(:,:,:,i_icecat,6)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qlevp_    = diag_ice_2mom_liqfrac(:,:,:,i_icecat,7)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qifrz_    = diag_ice_2mom_liqfrac(:,:,:,i_icecat,8)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qccoll_   = diag_ice_2mom_liqfrac(:,:,:,i_icecat,9)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_qrcoll_   = diag_ice_2mom_liqfrac(:,:,:,i_icecat,10)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nlshd_    = diag_ice_2mom_liqfrac(:,:,:,i_icecat,11)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nlevp_    = diag_ice_2mom_liqfrac(:,:,:,i_icecat,12)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nrcoll_   = diag_ice_2mom_liqfrac(:,:,:,i_icecat,13)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nccoll_   = diag_ice_2mom_liqfrac(:,:,:,i_icecat,14)
+        p3_diag_ice_2mom_liqfrac_3d(i_icecat)%d_nifrz_    = diag_ice_2mom_liqfrac(:,:,:,i_icecat,15)
 !! << JM_20260407
-!! JM_20260415 >> adding number concentration diagnostics
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nlshd_    = ice_diag_2mom_liqfrac(:,:,:,i_icecat,11)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nlevp_    = ice_diag_2mom_liqfrac(:,:,:,i_icecat,12)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nrcoll_   = ice_diag_2mom_liqfrac(:,:,:,i_icecat,13)
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nccoll_   = ice_diag_2mom_liqfrac(:,:,:,i_icecat,14)
-!! << JM_20260415
-!! JM_20260708
-        p3_ice_diag_2mom_liqfrac_3d(i_icecat)%d_nifrz_    = ice_diag_2mom_liqfrac(:,:,:,i_icecat,15)
-!! << JM_20260708
       ENDIF
 
       p3_vars_3d(i_icecat)%dmean_i = diag_di_4d(:,:,:,i_icecat)
@@ -473,51 +450,51 @@ CONTAINS
     END DO
 
     DO i_icecat = 1, n_icecat
-!! JM_20260407 >> store computed 2mom ice-phase process rates (need to be adjusted here when adding more diagnostics)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qidep_  = ice_diag_2mom(:,:,:,i_icecat,1)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qisub_  = ice_diag_2mom(:,:,:,i_icecat,2)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qinuc_  = ice_diag_2mom(:,:,:,i_icecat,3)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qchetc_ = ice_diag_2mom(:,:,:,i_icecat,4)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qcheti_ = ice_diag_2mom(:,:,:,i_icecat,5)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qrhetc_ = ice_diag_2mom(:,:,:,i_icecat,6)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qrheti_ = ice_diag_2mom(:,:,:,i_icecat,7)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qrmlt_  = ice_diag_2mom(:,:,:,i_icecat,8)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qccol_  = ice_diag_2mom(:,:,:,i_icecat,9)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qrcol_  = ice_diag_2mom(:,:,:,i_icecat,10)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qwgrth_ = ice_diag_2mom(:,:,:,i_icecat,11)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qcshd_  = ice_diag_2mom(:,:,:,i_icecat,12)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qcmul_  = ice_diag_2mom(:,:,:,i_icecat,13)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qrmul_  = ice_diag_2mom(:,:,:,i_icecat,14)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nimul_  = ice_diag_2mom(:,:,:,i_icecat,15)
+!! JM_20260407 >> store computed 2-moment ice-phase process rates (need to be adjusted here when adding more diagnostics)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qidep_  = diag_ice_2mom(:,:,:,i_icecat,1)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qisub_  = diag_ice_2mom(:,:,:,i_icecat,2)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qinuc_  = diag_ice_2mom(:,:,:,i_icecat,3)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qchetc_ = diag_ice_2mom(:,:,:,i_icecat,4)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qcheti_ = diag_ice_2mom(:,:,:,i_icecat,5)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qrhetc_ = diag_ice_2mom(:,:,:,i_icecat,6)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qrheti_ = diag_ice_2mom(:,:,:,i_icecat,7)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qrmlt_  = diag_ice_2mom(:,:,:,i_icecat,8)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qccol_  = diag_ice_2mom(:,:,:,i_icecat,9)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qrcol_  = diag_ice_2mom(:,:,:,i_icecat,10)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qwgrth_ = diag_ice_2mom(:,:,:,i_icecat,11)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qcshd_  = diag_ice_2mom(:,:,:,i_icecat,12)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qcmul_  = diag_ice_2mom(:,:,:,i_icecat,13)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qrmul_  = diag_ice_2mom(:,:,:,i_icecat,14)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nimul_  = diag_ice_2mom(:,:,:,i_icecat,15)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nccol_  = diag_ice_2mom(:,:,:,i_icecat,16)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nrcol_  = diag_ice_2mom(:,:,:,i_icecat,17)
+      p3_diag_ice_2mom_3d(i_icecat)%d_ninuc_  = diag_ice_2mom(:,:,:,i_icecat,18)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nimlt_  = diag_ice_2mom(:,:,:,i_icecat,19)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nisub_  = diag_ice_2mom(:,:,:,i_icecat,20)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nislf_  = diag_ice_2mom(:,:,:,i_icecat,21)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nchetc_ = diag_ice_2mom(:,:,:,i_icecat,22)
+      p3_diag_ice_2mom_3d(i_icecat)%d_ncheti_ = diag_ice_2mom(:,:,:,i_icecat,23)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nrhetc_ = diag_ice_2mom(:,:,:,i_icecat,24)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nrheti_ = diag_ice_2mom(:,:,:,i_icecat,25)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nrshdr_ = diag_ice_2mom(:,:,:,i_icecat,26)
+      p3_diag_ice_2mom_3d(i_icecat)%d_ncshdc_ = diag_ice_2mom(:,:,:,i_icecat,27)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qimul_ffd_frz_  = diag_ice_2mom(:,:,:,i_icecat,28)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nimul_ffd_frz_  = diag_ice_2mom(:,:,:,i_icecat,29)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qimul_ffd_imm_  = diag_ice_2mom(:,:,:,i_icecat,30)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nimul_ffd_imm_  = diag_ice_2mom(:,:,:,i_icecat,31)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qimul_ffd_rim_  = diag_ice_2mom(:,:,:,i_icecat,32)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nimul_ffd_rim_  = diag_ice_2mom(:,:,:,i_icecat,33)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qcmul_ffd_rim_  = diag_ice_2mom(:,:,:,i_icecat,34)
+      p3_diag_ice_2mom_3d(i_icecat)%d_ncmul_ffd_rim_  = diag_ice_2mom(:,:,:,i_icecat,35)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qchom_ = diag_ice_2mom(:,:,:,i_icecat,36)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nchom_ = diag_ice_2mom(:,:,:,i_icecat,37)
+      p3_diag_ice_2mom_3d(i_icecat)%d_qrhom_ = diag_ice_2mom(:,:,:,i_icecat,38)
+      p3_diag_ice_2mom_3d(i_icecat)%d_nrhom_ = diag_ice_2mom(:,:,:,i_icecat,39)
 !! << JM_20260407
-!! JM_20260415 >> adding number concentration diagnostics
-      p3_ice_diag_2mom_3d(i_icecat)%d_nccol_  = ice_diag_2mom(:,:,:,i_icecat,16)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nrcol_  = ice_diag_2mom(:,:,:,i_icecat,17)
-      p3_ice_diag_2mom_3d(i_icecat)%d_ninuc_  = ice_diag_2mom(:,:,:,i_icecat,18)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nimlt_  = ice_diag_2mom(:,:,:,i_icecat,19)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nisub_  = ice_diag_2mom(:,:,:,i_icecat,20)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nislf_  = ice_diag_2mom(:,:,:,i_icecat,21)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nchetc_ = ice_diag_2mom(:,:,:,i_icecat,22)
-      p3_ice_diag_2mom_3d(i_icecat)%d_ncheti_ = ice_diag_2mom(:,:,:,i_icecat,23)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nrhetc_ = ice_diag_2mom(:,:,:,i_icecat,24)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nrheti_ = ice_diag_2mom(:,:,:,i_icecat,25)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nrshdr_ = ice_diag_2mom(:,:,:,i_icecat,26)
-      p3_ice_diag_2mom_3d(i_icecat)%d_ncshdc_ = ice_diag_2mom(:,:,:,i_icecat,27)
-!! << JM_20260415
-!! JM_20260619 >> adding SIP processes (ffd during refreezing, immersion freezing and riming)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qimul_ffd_frz_  = ice_diag_2mom(:,:,:,i_icecat,28)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nimul_ffd_frz_  = ice_diag_2mom(:,:,:,i_icecat,29)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qimul_ffd_imm_  = ice_diag_2mom(:,:,:,i_icecat,30)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nimul_ffd_imm_  = ice_diag_2mom(:,:,:,i_icecat,31)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qimul_ffd_rim_  = ice_diag_2mom(:,:,:,i_icecat,32)
-      p3_ice_diag_2mom_3d(i_icecat)%d_nimul_ffd_rim_  = ice_diag_2mom(:,:,:,i_icecat,33)
-      p3_ice_diag_2mom_3d(i_icecat)%d_qcmul_ffd_rim_  = ice_diag_2mom(:,:,:,i_icecat,34)
-      p3_ice_diag_2mom_3d(i_icecat)%d_ncmul_ffd_rim_  = ice_diag_2mom(:,:,:,i_icecat,35)
-!! << JM_20260619
-!! JM_20260407 >> store computed 2mom ice-ice collision rates (need to be adjusted here when adding more diagnostics)
+!! JM_20260407 >> store computed 2-moment ice-ice collision rates (need to be adjusted here when adding more diagnostics)
       DO catcoll = 1, n_icecat
          if (i_icecat .ne. catcoll) then
-           p3_ice_diag_2mom_coll_3d(i_icecat, catcoll)%d_qicol_ = ice_diag_2mom_coll(:,:,:,i_icecat, catcoll, 1)
+           p3_diag_ice_2mom_coll_3d(i_icecat, catcoll)%d_qicol_ = diag_ice_2mom_coll(:,:,:,i_icecat, catcoll, 1)
          END IF
       END DO
 !! << JM_20260407
@@ -542,16 +519,17 @@ CONTAINS
     ! update microphysical vars
     mp_vars_3d%dmean_c = diag_3d(:,:,:,1)
     mp_vars_3d%dmean_r = diag_3d(:,:,:,2)
-!! JM_20260323 >> adding warm-rain diagnostics
-    mp_vars_3d%d_qcnuc = diag_3d(:,:,:,3)
-    mp_vars_3d%d_qccon = diag_3d(:,:,:,4)
-    mp_vars_3d%d_qrcon = diag_3d(:,:,:,5)
-    mp_vars_3d%d_qcevp = diag_3d(:,:,:,6)
-    mp_vars_3d%d_qrevp = diag_3d(:,:,:,7)
-    mp_vars_3d%d_qcacc = diag_3d(:,:,:,8)
-    mp_vars_3d%d_qcaut = diag_3d(:,:,:,9)
-!! JM_20260323
     mp_vars_3d%deff_c = diag_effc_3d * 2.
+
+!! JM_20260407 >> store computed 2-moment warm-phase process rates (need to be adjusted here when adding more diagnostics)
+    p3_diag_wrm_2mom_3d%d_qcnuc = diag_wrm_2mom(:,:,:,1)
+    p3_diag_wrm_2mom_3d%d_qccon = diag_wrm_2mom(:,:,:,2)
+    p3_diag_wrm_2mom_3d%d_qrcon = diag_wrm_2mom(:,:,:,3)
+    p3_diag_wrm_2mom_3d%d_qcevp = diag_wrm_2mom(:,:,:,4)
+    p3_diag_wrm_2mom_3d%d_qrevp = diag_wrm_2mom(:,:,:,5)
+    p3_diag_wrm_2mom_3d%d_qcacc = diag_wrm_2mom(:,:,:,6)
+    p3_diag_wrm_2mom_3d%d_qcaut = diag_wrm_2mom(:,:,:,7)
+!! JM_20260407
 
     IF (n_icecat == 1) THEN
       mp_vars_3d%deff_i = p3_vars_3d(1)%deff_i
@@ -563,7 +541,7 @@ CONTAINS
       mp_vars_3d%deff_i = icon_tracer_3d%qi / dummysum
     ENDIF
 
-    mp_vars_3d%dhmax = diag_dhmax_4d(:,:,:,1) ! JM???
+    mp_vars_3d%dhmax = diag_dhmax_4d(:,:,:,1)
     mp_vars_3d%dhmax_ground(:,:,1) = max(mp_vars_3d%dhmax_ground(:,:,1), diag_dhmax_4d(:,p_patch%nlev,:,1))
     mp_vars_3d%ze_p3 = diag_ze_3d
 
@@ -601,25 +579,25 @@ CONTAINS
 
     ! clean up
     DEALLOCATE(diag_2d, diag_3d)
-!! JM_20260407 >> cleanup ice-phase diagnostics
-    DEALLOCATE(ice_diag_2mom, ice_diag_2mom_coll, ice_diag_2mom_liqfrac, ice_diag_3mom)
-!! << JM_20260407
 
     CALL dyn_vars_3d%nullify()
     CALL mp_vars_3d%nullify()
     CALL icon_tracer_3d%nullify()
+!! JM_20260723 >> nullifying warm-phase diagnostics
+    CALL p3_diag_wrm_2mom_3d%nullify()
+!! << JM_20260723
     DO i_icecat = 1, n_icecat
       CALL p3_vars_3d(i_icecat)%nullify()
       CALL p3_tracer_3d(i_icecat)%nullify()
 !! JM_20260407 >> nullifying ice-phase diagnostics
-      CALL p3_ice_diag_2mom_3d(i_icecat)%nullify()
+      CALL p3_diag_ice_2mom_3d(i_icecat)%nullify()
       DO catcoll = 1, n_icecat
          if (i_icecat .ne. catcoll) then
-           CALL p3_ice_diag_2mom_coll_3d(i_icecat, catcoll)%nullify()
+           CALL p3_diag_ice_2mom_coll_3d(i_icecat, catcoll)%nullify()
          END IF
       END DO
-      CALL p3_ice_diag_2mom_liqfrac_3d(i_icecat)%nullify()
-      CALL p3_ice_diag_3mom_3d(i_icecat)%nullify()
+      CALL p3_diag_ice_2mom_liqfrac_3d(i_icecat)%nullify()
+      CALL p3_diag_ice_3mom_3d(i_icecat)%nullify()
 !! << JM_20260407
     END DO
 
