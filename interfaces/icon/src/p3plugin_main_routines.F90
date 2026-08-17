@@ -136,6 +136,27 @@ CONTAINS
     CALL mp_vars%rain_gsp%to_3d(mp_vars_3d%rain_gsp)
     CALL mp_vars%snow_gsp%to_3d(mp_vars_3d%snow_gsp)
 
+!! JM_20260728 >> extract precipitation rate and hydrometeor types to 3D working arrays
+    CALL mp_vars%prt_cld%to_3d(mp_vars_3d%prt_cld)
+    CALL mp_vars%prt_drzl%to_3d(mp_vars_3d%prt_drzl)
+    CALL mp_vars%prt_rain%to_3d(mp_vars_3d%prt_rain)
+    CALL mp_vars%prt_crys%to_3d(mp_vars_3d%prt_crys)
+    CALL mp_vars%prt_snow%to_3d(mp_vars_3d%prt_snow)
+    CALL mp_vars%prt_wsnow%to_3d(mp_vars_3d%prt_wsnow)
+    CALL mp_vars%prt_grpl%to_3d(mp_vars_3d%prt_grpl)
+    CALL mp_vars%prt_pell%to_3d(mp_vars_3d%prt_pell)
+    CALL mp_vars%prt_hail%to_3d(mp_vars_3d%prt_hail)
+    CALL mp_vars%q_cld%to_3d(mp_vars_3d%q_cld)
+    CALL mp_vars%q_drzl%to_3d(mp_vars_3d%q_drzl)
+    CALL mp_vars%q_rain%to_3d(mp_vars_3d%q_rain)
+    CALL mp_vars%qi_crys%to_3d(mp_vars_3d%qi_crys)
+    CALL mp_vars%qi_snow%to_3d(mp_vars_3d%qi_snow)
+    CALL mp_vars%qi_wsnow%to_3d(mp_vars_3d%qi_wsnow)
+    CALL mp_vars%qi_grpl%to_3d(mp_vars_3d%qi_grpl)
+    CALL mp_vars%qi_pell%to_3d(mp_vars_3d%qi_pell)
+    CALL mp_vars%qi_hail%to_3d(mp_vars_3d%qi_hail)
+!! << JM_20260728
+
     CALL icon_tracer%qv%to_3d(icon_tracer_3d%qv)
     CALL icon_tracer%qv_old%to_3d(icon_tracer_3d%qv_old)
     CALL icon_tracer%qc%to_3d(icon_tracer_3d%qc)
@@ -248,8 +269,8 @@ CONTAINS
     END DO
 
 
-    n_diag_2d = 1  ! not used
-    n_diag_3d = 2  ! diag_3d contains dmean_c, dmean_r, ....
+    n_diag_2d = 9  ! prt_type diagnostics (prt_cld, prt_drzl, prt_rain, prt_crys, prt_snow, prt_wsnow, prt_grpl, prt_pell, prt_hail)
+    n_diag_3d = 11 ! q_type diagnostics (q_cld, q_drzl, q_rain, qi_crys, qi_snow, qi_wsnow, qi_grpl, qi_pell, qi_hail) and dmean_c, dmean_r, 
     ALLOCATE(diag_2d(p_global%nproma, p_patch%cells%nblks, n_diag_2d))
     ALLOCATE(diag_3d(p_global%nproma, p_patch%nlev, p_patch%cells%nblks, n_diag_3d))
 
@@ -517,9 +538,30 @@ CONTAINS
     dyn_vars_3d%ddt_temp_phys = (dyn_vars_3d%temp - temp_before_phys_3d) / dtime
 
     ! update microphysical vars
-    mp_vars_3d%dmean_c = diag_3d(:,:,:,1)
-    mp_vars_3d%dmean_r = diag_3d(:,:,:,2)
+    mp_vars_3d%dmean_c = diag_3d(:,:,:,10)
+    mp_vars_3d%dmean_r = diag_3d(:,:,:,11)
     mp_vars_3d%deff_c = diag_effc_3d * 2.
+
+!! JM_20260813 >> store computed precipitation rate and hydrometeor type diagnostic to mp_vars_3d
+    mp_vars_3d%prt_cld(:,:,1)   = diag_2d(:,:,1)
+    mp_vars_3d%prt_drzl(:,:,1)  = diag_2d(:,:,2)
+    mp_vars_3d%prt_rain(:,:,1)  = diag_2d(:,:,3)
+    mp_vars_3d%prt_crys(:,:,1)  = diag_2d(:,:,4)
+    mp_vars_3d%prt_snow(:,:,1)  = diag_2d(:,:,5)
+    mp_vars_3d%prt_wsnow(:,:,1) = diag_2d(:,:,6)
+    mp_vars_3d%prt_grpl(:,:,1)  = diag_2d(:,:,7)
+    mp_vars_3d%prt_pell(:,:,1)  = diag_2d(:,:,8)
+    mp_vars_3d%prt_hail(:,:,1)  = diag_2d(:,:,9)
+    mp_vars_3d%q_cld            = diag_3d(:,:,:,1)
+    mp_vars_3d%q_drzl           = diag_3d(:,:,:,2)
+    mp_vars_3d%q_rain           = diag_3d(:,:,:,3)
+    mp_vars_3d%qi_crys          = diag_3d(:,:,:,4)
+    mp_vars_3d%qi_snow          = diag_3d(:,:,:,5)
+    mp_vars_3d%qi_wsnow         = diag_3d(:,:,:,6)
+    mp_vars_3d%qi_grpl          = diag_3d(:,:,:,7)
+    mp_vars_3d%qi_pell          = diag_3d(:,:,:,8)
+    mp_vars_3d%qi_hail          = diag_3d(:,:,:,9)
+!! << JM_20260813
 
 !! JM_20260407 >> store computed 2-moment warm-phase process rates (need to be adjusted here when adding more diagnostics)
     p3_diag_wrm_2mom_3d%d_qcnuc = diag_wrm_2mom(:,:,:,1)
@@ -549,7 +591,7 @@ CONTAINS
     mp_vars_3d%rain_gsp_rate(:,:,1) = prt_liq_2d * 1000.
     mp_vars_3d%snow_gsp_rate(:,:,1) = prt_sol_2d * 1000.
     mp_vars_3d%prec_gsp(:,:,1) = mp_vars_3d%prec_gsp(:,:,1) + (prt_liq_2d + prt_sol_2d) * 1000.
-    mp_vars_3d%prec_gsp_d(:,:,1) = mp_vars_3d%prec_gsp_d(:,:,1) + (prt_liq_2d + prt_sol_2d) * 1000.
+    mp_vars_3d%prec_gsp_d(:,:,1) = mp_vars_3d%prec_gsp_d(:,:,1) + (prt_liq_2d + prt_sol_2d) * 1000. ! JM note: why is this variable needed?
     mp_vars_3d%rain_gsp(:,:,1) = mp_vars_3d%rain_gsp(:,:,1) + prt_liq_2d * 1000.
     mp_vars_3d%snow_gsp(:,:,1) = mp_vars_3d%snow_gsp(:,:,1) + prt_sol_2d * 1000.
     !IF (rank_world == 0) WRITE (0,*) 'shape(prt_sol_2d)', shape(prt_sol_2d)

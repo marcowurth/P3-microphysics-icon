@@ -2056,6 +2056,10 @@ END subroutine p3_init
 
  real, intent(out),   dimension(its:ite)              :: prt_liq    ! precipitation rate, liquid (c+r) m s-1
  real, intent(out),   dimension(its:ite)              :: prt_sol    ! precipitation rate, solid        m s-1
+ !! JM_20260813 >> adding prt_liq_c as an output for precipitation rate of liquid cloud water only (not including rain) for precipitation rate type diagnostic
+ real, dimension(its:ite)                             :: prt_liq_c  ! precipitation rate, liquid (c) m s-1
+!! << JM_20260813
+
  real, intent(out),   dimension(its:ite,kts:kte)      :: diag_ze    ! equivalent reflectivity          dBZ
  real, intent(out),   dimension(its:ite,kts:kte)      :: diag_effc  ! effective radius, cloud          m
  real, intent(out),   dimension(its:ite,kts:kte,nCat) :: diag_effi  ! effective radius, ice            m
@@ -2071,13 +2075,13 @@ END subroutine p3_init
  real, intent(out),   dimension(its:ite,n_diag_2d)         :: diag_2d    ! user-defined 2D diagnostic fields
  real, intent(out),   dimension(its:ite,kts:kte,n_diag_3d) :: diag_3d    ! user-defined 3D diagnostic fields
 !! JM_20260407 >> adding 4D/5D diag for 2-moment warm-phase, 2-moment ice-phase, 2-moment ice-ice collision, 2-moment ice-liquid and 3-moment ice-phase diagnostics
- real, intent(out),   dimension(its:ite,kts:kte,n_diag_wrm_2mom), optional                :: diag_wrm_2mom         ! user-defined 4D diagnostic fields for warm-phase 2-moment diagnostics
- real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_ice_2mom), optional           :: diag_ice_2mom         ! user-defined 4D diagnostic fields for ice-phase 2-moment diagnostics
- real, intent(out),   dimension(its:ite,kts:kte,nCat,nCat,n_diag_ice_2mom_coll), optional :: diag_ice_2mom_coll    ! user-defined 5D diagnostic fields for ice-ice collision 2-moment diagnostics
- real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_ice_2mom_liqfrac), optional   :: diag_ice_2mom_liqfrac ! user-defined 4D diagnostic fields for ice-liquid 2-moment diagnostics
- real, intent(out),   dimension(its:ite,kts:kte,nCat,n_diag_ice_3mom), optional           :: diag_ice_3mom         ! user-defined 4D diagnostic fields for ice-phase 3-moment diagnostics
+ real, intent(inout),   dimension(its:ite,kts:kte,n_diag_wrm_2mom), optional                :: diag_wrm_2mom         ! user-defined 4D diagnostic fields for warm-phase 2-moment diagnostics
+ real, intent(inout),   dimension(its:ite,kts:kte,nCat,n_diag_ice_2mom), optional           :: diag_ice_2mom         ! user-defined 4D diagnostic fields for ice-phase 2-moment diagnostics
+ real, intent(inout),   dimension(its:ite,kts:kte,nCat,nCat,n_diag_ice_2mom_coll), optional :: diag_ice_2mom_coll    ! user-defined 5D diagnostic fields for ice-ice collision 2-moment diagnostics
+ real, intent(inout),   dimension(its:ite,kts:kte,nCat,n_diag_ice_2mom_liqfrac), optional   :: diag_ice_2mom_liqfrac ! user-defined 4D diagnostic fields for ice-liquid 2-moment diagnostics
+ real, intent(inout),   dimension(its:ite,kts:kte,nCat,n_diag_ice_3mom), optional           :: diag_ice_3mom         ! user-defined 4D diagnostic fields for ice-phase 3-moment diagnostics
 !! << JM_20260407
-!! JM_20260629 >> adding 4230553 as an argument for the depletion of INPs
+!! JM_20260629 >> adding n_inact as an argument for the depletion of INPs
  real, intent(inout), dimension(its:ite,kts:kte), optional :: n_inact ! number of activated INPs  # kg-1
 !! << JM_20260629
 
@@ -2337,13 +2341,13 @@ END subroutine p3_init
 
 ! quantities related to diagnostic hydrometeor/precipitation types
  real,    parameter                       :: thres_raindrop  = 100.e-6 !size threshold for drizzle vs. rain
- real,    dimension(its:ite,kts:kte)      :: Q_drizzle,Q_rain
+ real,    dimension(its:ite,kts:kte)      :: Q_cloud,Q_drizzle,Q_rain  ! JM_20260813 >> adding Q_cloud for cloud water
  real,    dimension(its:ite,kts:kte,nCat) :: Q_crystals,Q_snow,Q_wsnow,Q_grpl,Q_pellets,Q_hail
  integer                                  :: ktop_typeDiag    !ktop_typeDiag_r,ktop_typeDiag_i
  logical                                  :: log_typeDiags,log_typeDiag_column
 
  real               :: freq3Ddiag              ! frequency (min) for full-column diagnostics
- real, parameter    :: freq3Ddiag_default = 5. ! value set if not passed in
+ real, parameter    :: freq3Ddiag_default = 1. ! value set if not passed in ! JM_20260813 >> changed from 5. to 1.
 
 ! to be added as namelist parameters (future)
  logical, parameter :: debug_ABORT  = .true. !.true. will result in forced abort in s/r 'check_values'
@@ -2526,6 +2530,9 @@ call cpu_time(timer_start(1))
 ! note: '1./max(30.,dt)' = '1.*min(1./30., 1./dt)'
  timeScaleFactor = min(1./120., i_dt)
 
+!! JM_20260813 >> initializing prt_liq_c in order to have separate diagnostics for qc and qr in typeDiag
+ prt_liq_c  = 0.
+!! << JM_20260813
  prt_liq    = 0.
  prt_sol    = 0.
  prt_soli   = 0.
@@ -3465,13 +3472,14 @@ call cpu_time(timer_start(3))
                                 0.5)*((t(i,k)-trplpt)*(-kap)+rho(i,k)*enthls(i,k)*dv*   &
                                 (qsat0-Qv_cld(i,k))*2.*pi/xlf(i,k)))*nitot(i,k,iice)
                   qifrz(iice) = min(max(qifrz(iice),0.),qiliq(i,k,iice)*i_dt)
-!! JM_20260619 << adding how many rain drops refreeze.
+!! JM_20260619 << adding how many rain drops refreeze. Assumption: the number of mixed-phase ice particles that freeze
+!				  is given by the fraction of qifrz / qiliq x total mixed-phase particles (nitot)
                   nifrz(iice) = qifrz(iice)/qiliq(i,k,iice)*nitot(i,k,iice)
 !! << JM_20260619
 
 !! JM_20260427 >> adding Sullivan FFD parameterization
                   ! !--- SULLIVAN FFD parameterization ---!
-                  ! if (nCat>1) then
+				  ! if (nCat>1) then
                   !    !determine destination ice-phase category
                   !    D_new = 10.e-6 !assumes ice crystals from FFD are tiny
                   !    call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest_ffd)
@@ -3479,7 +3487,7 @@ call cpu_time(timer_start(3))
                   ! else
                   !    iice_dest_ffd = 1
                   ! endif
-
+                  !
                   ! p_DS = p_max * EXP(-((t(i,k) - norm_temp)/(2.0**0.5*norm_sigma))**2.0)
                   ! N_DS = MAX(p_DS * eta_DS, 0.0)
                   ! dum1 = MAX(nifrz(iice) * N_DS, 0.0)
@@ -3500,16 +3508,13 @@ call cpu_time(timer_start(3))
                   ! !-- calculate mean rain drop diameter (based on rain DSD)
                   ! !-- We assume that the liquid water on a mixed-phase particle that freezes is the same as the mass of pure 
                   ! !   rain drops that would freeze.
-                  
                   ! qifrz_present: if (qifrz(iice) .ge. qsmall) then
-                  !    !
-                  !    ! JM note: is it correct to use the rain dsd here with qifrz and nifrz? I guess using rain does not make sense here because rain is not part of that freezing process
-                  !    ! 
+                  !    !-- Assumption: qifrz and nifrz are the actual mass and number of rain drops that freeze, respectively
                   !    call get_rain_dsd2(qifrz(iice),nifrz(iice),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
                   !    d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
                   !    ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
 
-                  !    !-- calculate mean rain drop mass
+                  !    !-- calculate mean rain drop mass (before freezing)
                   !    m_rain = piov6 * 1000 * d_rain**3 ! mass of mean rain drop for FFD, assuming density of 1000 kg/m3
 
                   !    !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
@@ -3522,7 +3527,7 @@ call cpu_time(timer_start(3))
          
                   !    !-- mass of fragments from FFD
                   !    dum2_small = dum1_small * piov6 * 900 * D_new**3 ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
-                  !    dum2_big   = dum1_big * 1./2. * m_rain           ! assumes big fragments have mass equal to half of the mean rain drop mass
+                  !    dum2_big   = dum1_big * 1./2.5 * m_rain          ! assumes big fragments have mass equal to 1/2.5 of the mean rain drop mass
 
                   !    !-- small fragments from FFD
                   !    if (nCat>1) then
@@ -3546,7 +3551,7 @@ call cpu_time(timer_start(3))
                   !    !-- big fragments from FFD
                   !    if (nCat>1) then
                   !       !determine destination ice-phase category
-                  !       D_big = (( (1./2.*m_rain)*6.)/(920*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2*m_rain
+                  !       D_big = (( (1./2.5*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2.5*m_rain
                   !       call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
                   !       if (global_status /= STATUS_OK) return
                   !    else
@@ -3782,12 +3787,8 @@ call cpu_time(timer_start(3))
             ! !--- PHILLIPS FFD parameterization ---!
 
             ! !-- calculate mean rain drop diameter (based on rain DSD)
-            
-            ! !
-            ! ! JM note: Should I use qr and nr here in get_rain_dsd2 or use Q_nuc and N_nuc?
-            ! !
-
-            !  call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+		    ! !   Assumption: Q_nuc and N_nuc are the actual mass and number of rain drops that freeze, respectively
+            !  call get_rain_dsd2(Q_nuc,N_nuc,mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
             !  d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
             !  ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
 
@@ -3804,7 +3805,7 @@ call cpu_time(timer_start(3))
  
             !  !-- mass of fragments from FFD
             !  dum2_small = dum1_small * piov6 * 900 * D_new**3 ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
-            !  dum2_big   = dum1_big * 1./2. * m_rain           ! assumes big fragments have mass equal to half of the mean rain drop mass
+            !  dum2_big   = dum1_big * 1./2.5 * m_rain          ! assumes big fragments have mass equal to 1/2.5 of the mean rain drop mass
 
             !  !-- small fragments from FFD
             !  if (nCat>1) then
@@ -3828,7 +3829,7 @@ call cpu_time(timer_start(3))
             !  !-- big fragments from FFD
             !  if (nCat>1) then
             !     !determine destination ice-phase category
-            !     D_big = (( (1./2.*m_rain)*6.)/(920*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2*m_rain
+            !     D_big = (( (1./2.5*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2.5*m_rain
             !     call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
             !     if (global_status /= STATUS_OK) return
             !  else
@@ -3987,9 +3988,10 @@ call cpu_time(timer_start(3))
          ! enddo iice_loop_FFD_Qu
 
          ! !--- Phillips FFD parameterization ---!
-         ! qr_present: if (qr(i,k)*iSPF(i,k).ge.qsmall) then
+         ! qr_present: if (qrcol(iice).gt.qsmall) then
          !    !-- calculate mean rain drop diameter (based on rain DSD)
-         !    call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+		 !    !   Assumption: qrcol and nrcol are the actual mass and number of rain drops that freezes, respectively
+         !    call get_rain_dsd2(qrcol(iice),nrcol(iice),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
          !    d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
          !    ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
 
@@ -3997,10 +3999,10 @@ call cpu_time(timer_start(3))
          !    m_rain = piov6 * 1000 * d_rain**3   ! rhow = 1000 kg/m3
 
          !    !-- calculate mean rain drop fallspeed
-         !    call get_rain_fallspeed(qr(i,k),nr(i,k),iSPF(i,k),rhofacr(i,k),v_qrain)
+         !    call get_rain_fallspeed(qrcol(iice),nrcol(iice),iSPF(i,k),rhofacr(i,k),v_qrain)
 
          !    iice_loop_FFD_Phil:  do iice = 1,nCat
-         !       calc_FFD_Phil:  if  ((qrcol(iice).gt.qsmall) .and. (qitot(i,k,iice).ge.qsmall) .and. (qirim(i,k,iice).ge.qsmall) &
+         !       calc_FFD_Phil:  if  ((qitot(i,k,iice).ge.qsmall) .and. (qirim(i,k,iice).ge.qsmall) &
          !                            .and. (t(i,k).gt.235.15) .and. (t(i,k).lt.273.15) &
          !                            .and. (diam_ice(i,k,iice).lt.1000.e-6)) then
 
@@ -4009,6 +4011,8 @@ call cpu_time(timer_start(3))
 
          !          ffd_mode1and2: if (m_rain .gt. m_ice) then
          !             ! Mode 1:
+		 ! 		       !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
+         !    		   !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
          !             call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
 
          !             !-- small fragments from FFD
@@ -4037,7 +4041,7 @@ call cpu_time(timer_start(3))
          !             !-- big fragments from FFD
          !             if (nCat>1) then
          !                !determine destination ice-phase category
-         !                D_big = (( (1./2.*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2*m_rain
+         !                D_big = (( (1./2.5*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2.5*m_rain
          !                call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
          !                if (global_status /= STATUS_OK) return
          !             else
@@ -4045,8 +4049,8 @@ call cpu_time(timer_start(3))
          !             endif
 
          !             !-- number and mass of big fragments from FFD 
-         !             dum1_big   = E_freeze * nrcol(iice) * nb_frag      ! total number of big fragments from FFD
-         !             dum2_big   = dum1_big * 1./2. * m_rain             ! assumes big fragments have mass equal to 1/2 of the mean rain drop mass
+         !             dum1_big   = E_freeze * nrcol(iice) * nb_frag    ! total number of big fragments from FFD
+         !             dum2_big   = dum1_big * 1./2.5 * m_rain          ! assumes big fragments have mass equal to 1/2.5 of the mean rain drop mass
 
          !             qrcol(iice) = qrcol(iice) - dum2_big
          !             if (qrcol(iice) .lt. 0.0 ) then
@@ -4067,13 +4071,12 @@ call cpu_time(timer_start(3))
          !             endif
                      
          !             ! Mode 2:
-         !             !
-         !             ! JM note: I think d_rain, m_rain, v_qrain should be calculated based on qrcol and nrcol and NOT on qr and nr
-         !             !          because the formula of Phillips [Eq. (7)] is based on the actually colliding rain drops and not on
-         !             !          the total rain drops in the grid cell.
-         !             !  
          !             ! Total number of splashes per event. One raindrop will release N_splashes
-         !             N_splashes =  delN_drop_splash_mode2(t(i,k), d_rain, m_rain, m_ice, v_qrain, v_qice)
+		 ! 		       if (d_rain .gt. 150.e-6) then
+	     !                 N_splashes =  delN_drop_splash_mode2(t(i,k), d_rain, m_rain, m_ice, v_qrain, v_qice)
+		 ! 		       else
+         !                 N_splashes = 0
+         !             endif
 
          !             ! Number of ice and cloud liquid fragments of all collisions
          !             !       - phi of all splashes will freeze into ice crysals
@@ -4957,13 +4960,6 @@ call cpu_time(timer_start(3))
              qitot(i,k,iice) = qitot(i,k,iice) - (qisub(iice)+qrmlt(iice))*dt
          ! endif
 
-         !! JM_20260723: I dont understand the following here:
-         !                 - why is SIP (qrmul & qcmul) added to qirim and birim?
-         !                 - why is immersion freezing added to qirim and birim?
-         !                 - why is contact freezing added to qirim and birim? because it can be understand as an accretion process?
-         !                 - why is qifrz only added to qirim and birim and not to qitot?
-         !                 - why is qwgrth1c and qwgrth1r added to qitot AND qiliq? Shouldn't it be substracted from qiliq?
-
           tmp1             = (qrcol(iice)+qccol(iice)+qrhetc(iice)+qrheti(iice)+         &
                             qimul_ffd_imm(iice)+qimul_ffd_rim(iice)+                     & ! JM_20260727: adding qimul_ffd_imm(iice) and qimul_ffd_rim(iice) from Phillips FFD parameterization
                             qchetc(iice)+qcheti(iice)+qrmul(iice)+qcmul(iice))*dt
@@ -5304,7 +5300,9 @@ call cpu_time(timer_start(6))
     if (maxval(qc(i,:)) .ge. qsmall)                                                     &
        call sedimentation_liquid(qc(i,:),nc(i,:),1,iSCF(i,:),prt_liq(i),rho(i,:),        &
                        i_rho(i,:),i_dzq(i,:),dt,ktop,kbot,kdir,acn=acn(i,:),dnu=dnu(:))
-
+!! JM_20260813 >> add a new variable to store the original prt_liq from cloud sedimentation
+       prt_liq_c(i) = prt_liq(i)
+!! << JM_20260813
 ! Rain:
     if (maxval(qr(i,:)) .ge. qsmall)                                                     &
        call sedimentation_liquid(qr(i,:),nr(i,:),2,iSPF(i,:),prt_liq(i),rho(i,:),        &
@@ -5888,7 +5886,7 @@ timer_description(9) = 'type_diags'
 call cpu_time(timer_start(9))
 #endif
 
- log_outputStep = (mod(it*dt,freq3Ddiag*60.)==0. .or. freq3Ddiag==0.)                    &
+ log_outputStep = (mod((it-1)*dt,freq3Ddiag*60.)==0. .or. freq3Ddiag==0.) & ! JM_20260814 >> added -1 as it starts for for 00:00 UTC with step 1
                   .and. .not.freq3Ddiag<0.
 
 !--- diagnostics CM1:
@@ -5908,193 +5906,308 @@ call cpu_time(timer_start(9))
 !---
 
 !--- diagnostics for ICON only:
- if (trim(model)=='ICON') then
+ if (trim(model)=='ICON' .and. log_outputStep) then
     do i = its,ite
        do k = ktop,kbot,-kdir
           if (qc(i,k).ge.qsmall) then
              call get_cloud_dsd2(qc(i,k),nc(i,k),mu_c(i,k),rho(i,k),nu(i,k),dnu,lamc(i,k),tmp1,tmp2,iSPF(i,k))
-             diag_3d(i,k,1) = (mu_c(i,k)+1.)/lamc(i,k)                                        !-- number-weighted mean diameter of cloud droplets
-             !diag_3d(i,k,1) = ((mu_c(i,k)+3)*(mu_c(i,k)+2)*(mu_c(i,k)+1))**(1./3.)/lamc(i,k) !-- volume-weighted mean diameter of cloud droplets
+             diag_3d(i,k,10) = (mu_c(i,k)+1.)/lamc(i,k)                                        !-- number-weighted mean diameter of cloud droplets
+             !diag_3d(i,k,10) = ((mu_c(i,k)+3)*(mu_c(i,k)+2)*(mu_c(i,k)+1))**(1./3.)/lamc(i,k) !-- volume-weighted mean diameter of cloud droplets
           endif
 
           if (qr(i,k).ge.qsmall) then
              call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
-             diag_3d(i,k,2) = (mu_r(i,k)+1.)/lamr(i,k)                                        !-- number-weighted mean diameter of rain drops
-             !diag_3d(i,k,2) = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
+             diag_3d(i,k,11) = (mu_r(i,k)+1.)/lamr(i,k)                                        !-- number-weighted mean diameter of rain drops
+             !diag_3d(i,k,11) = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
           endif
        enddo
     enddo
  endif
 !---
 
- compute_type_diags: if (log_typeDiags .and. (trim(model)=='GEM'.or.trim(model)=='KIN1D')) then
-
-    if (.not.(present(prt_drzl).and.present(prt_rain).and.present(prt_crys).and.         &
-              present(prt_snow).and.present(prt_grpl).and.present(prt_pell).and.         &
-              present(prt_hail).and.present(prt_sndp))) then
-       print*,'***  ABORT IN P3_MAIN ***'
-       print*,'*  typeDiags_ON = .true. but prt_drzl, etc. are not passed into P3_MAIN'
-       print*,'*************************'
-       global_status = STATUS_ERROR
-       return
-    endif
-
-    prt_drzl(:) = 0.
-    prt_rain(:) = 0.
-    prt_crys(:) = 0.
-    prt_snow(:) = 0.
-    prt_grpl(:) = 0.
-    prt_pell(:) = 0.
-    prt_hail(:) = 0.
-    prt_sndp(:) = 0.
-    prt_wsnow(:) = 0.
-
-    if (present(qi_type)) qi_type(:,:,:) = 0.
-
-   ! compute hydrometeor type diagnostics for full columns on output timesteps only;
-   ! otherwise only calculate at bottom level (for precipitation rates)
-    ktop_typeDiag = merge(ktop, kbot, log_outputStep)
+!! JM_20260813 >> adding hydrometeor type and precipitation partitioning diagnostics for ICON
+ compute_type_diags: if (trim(model)=='ICON' .and. log_outputStep) then
 
     i_loop_typediag: do i = its,ite
 
-      !-- rain vs. drizzle:
-       k_loop_typdiag_1: do k = kbot,ktop_typeDiag,kdir
+        !-- cloud vs. drizzle vs. rain:
+        k_loop_typdiag_1: do k = kbot,ktop,kdir
 
-          Q_drizzle(i,k) = 0.
-          Q_rain(i,k)    = 0.
-          !note:  these can be broken down further (outside of microphysics) into
-          !       liquid rain (drizzle) vs. freezing rain (drizzle) based on sfc temp.
-          if (qr(i,k).ge.qsmall .and. nr(i,k).ge.nsmall) then
-!              if (tmp1 < thres_raindrop) then
-!                 Q_drizzle(i,k) = qr(i,k)
-!              else
-!                 Q_rain(i,k)    = qr(i,k)
-!              endif
-             tmp2 = merge(1., 0., tmp1 < thres_raindrop) !1. for drizzle, 0. for rain
-             Q_drizzle(i,k) = qr(i,k)*tmp2
-             Q_rain(i,k)    = qr(i,k)*(1.-tmp2)
-          endif
+            !-- reset 3d diagnostic arrays to zero
+            Q_cloud(i,k) = 0.
+            Q_drizzle(i,k) = 0.
+            Q_rain(i,k) = 0.
 
-       enddo k_loop_typdiag_1
+            !-- cloud
+            if (qc(i,k).ge.qsmall .and. nc(i,k).ge.nsmall) then
+                Q_cloud(i,k) = qc(i,k)
+                diag_3d(i,k,1) = Q_cloud(i,k)
+            endif
 
-!        if (Q_drizzle(i,kbot) > 0.) then
-!           prt_drzl(i) = prt_liq(i)
-!        elseif (Q_rain(i,kbot) > 0.) then
-!           prt_rain(i) = prt_liq(i)
-!        endif
-       tmp1 = merge(1., 0., Q_drizzle(i,kbot) > 0.)
-       prt_drzl(i) = prt_liq(i)*tmp1
-       prt_rain(i) = prt_liq(i)*(1.-tmp1)
+            !-- drizzle vs. rain
+            if (qr(i,k).ge.qsmall .and. nr(i,k).ge.nsmall) then
+                call get_rain_dsd2(qr(i,k),nr(i,k),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+                tmp1 = (mu_r(i,k)+1.)/lamr(i,k)                                        !-- number-weighted mean diameter of rain drops
+                !tmp1 = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
+                tmp2 = merge(1., 0., tmp1 < thres_raindrop) !1. for drizzle, 0. for rain
+                Q_drizzle(i,k) = qr(i,k)*tmp2
+                Q_rain(i,k)    = qr(i,k)*(1.-tmp2)
+                diag_3d(i,k,2) = Q_drizzle(i,k)
+                diag_3d(i,k,3) = Q_rain(i,k)
+            endif
 
-      !-- ice-phase:
-      iice_loop_diag: do iice = 1,nCat
+        enddo k_loop_typdiag_1
 
-          k_loop_typdiag_2: do k = kbot,ktop_typeDiag,kdir
+        if (Q_cloud(i,kbot) > 0.) diag_2d(i,1) = prt_liq_c(i)
+        if (Q_drizzle(i,kbot) > 0.) diag_2d(i,2) = prt_liq(i) - prt_liq_c(i)
+        if (Q_rain(i,kbot) > 0.) diag_2d(i,3) = prt_liq(i) - prt_liq_c(i)
 
-             Q_crystals(i,k,iice) = 0.
-             Q_snow(i,k,iice)     = 0.
-             Q_wsnow(i,k,iice)    = 0.
-             Q_grpl(i,k,iice)     = 0.
-             Q_pellets(i,k,iice)  = 0.
-             Q_hail(i,k,iice)     = 0.
-             liq_frac(i,k,iice)   = 0.
-             rime_frac(i,k,iice)  = 0.
-             rimedensity(i,k,iice) = 0.
+        !-- ice phase:
+        iice_loop_diag: do iice = 1,nCat  
+            k_loop_typdiag_2: do k = kbot,ktop,kdir
 
-             if ((qitot(i,k,iice)-qiliq(i,k,iice)).ge.qsmall) then
+                Q_crystals(i,k,iice) = 0.
+                Q_snow(i,k,iice)     = 0.
+                Q_wsnow(i,k,iice)    = 0.
+                Q_grpl(i,k,iice)     = 0.
+                Q_pellets(i,k,iice)  = 0.
+                Q_hail(i,k,iice)     = 0.
+                liq_frac(i,k,iice)   = 0.
+                rime_frac(i,k,iice)  = 0.
+                rimedensity(i,k,iice) = 0.
+                
+                if ((qitot(i,k,iice)-qiliq(i,k,iice)).ge.qsmall) then
 
-                rime_frac(i,k,iice) = qirim(i,k,iice)/(qitot(i,k,iice)-               &
-                                         qiliq(i,k,iice))                     ! rime mass fraction
-                t_tmp   = th(i,kbot)*(pres(i,kbot)*1.e-5)**(rd*i_cp)          ! 1st level temperature
-                if (birim(i,k,iice).ge.bsmall) then
-                   rimedensity(i,k,iice) = qirim(i,k,iice)/birim(i,k,iice)    ! rime density
-                endif
-                liq_frac(i,k,iice) = qiliq(i,k,iice)/qitot(i,k,iice)          ! liquid fraction
+                    rime_frac(i,k,iice) = qirim(i,k,iice)/(qitot(i,k,iice)- qiliq(i,k,iice)) ! rime mass fraction
+                    t_tmp   = th(i,kbot)*(pres(i,kbot)*1.e-5)**(rd*i_cp)                     ! 1st level temperature
+                    if (birim(i,k,iice).ge.bsmall) then
+                        rimedensity(i,k,iice) = qirim(i,k,iice)/birim(i,k,iice)              ! rime density
+                    endif
+                    liq_frac(i,k,iice) = qiliq(i,k,iice)/qitot(i,k,iice)                     ! liquid fraction
 
-                if (liq_frac(i,k,iice).ge.0.15) then
-                   Q_wsnow(i,k,iice) = qitot(i,k,iice)
-                else
-                   if (rime_frac(i,k,iice).lt.0.6) then
-!                       if (diag_di(i,k,iice).lt.0.002) then
-!                          Q_crystals(i,k,iice) = qitot(i,k,iice)
-!                       else
-!                          Q_snow(i,k,iice) = qitot(i,k,iice)
-!                       endif
-                      tmp1 = merge(1., 0., diag_di(i,k,iice).lt.0.002)
-                      Q_crystals(i,k,iice) = qitot(i,k,iice)*tmp1
-                      Q_snow(i,k,iice)     = qitot(i,k,iice)*(1.-tmp1)
-                   else
-                      if (rimedensity(i,k,iice).lt.850) then
-                        Q_grpl(i,k,iice) = qitot(i,k,iice)
-                      else
-                        if (t_tmp.lt.283.15) then
-                           Q_pellets(i,k,iice) = qitot(i,k,iice)
+                    if (liq_frac(i,k,iice).ge.0.15) then
+                        Q_wsnow(i,k,iice) = qitot(i,k,iice)
+                    else
+                        if (rime_frac(i,k,iice).lt.0.6) then
+                            if (diag_di(i,k,iice).lt.0.002) then
+                                Q_crystals(i,k,iice) = qitot(i,k,iice)
+                            else
+                                Q_snow(i,k,iice) = qitot(i,k,iice)
+                            endif
                         else
-                           Q_hail(i,k,iice) = qitot(i,k,iice)
-                           if (log_typeDiags) then
-                              diag_dhmax(i,k,iice) = maxHailSize(rho(i,k),               &
-                               nitot(i,k,iice),rhofaci(i,k),arr_lami(i,k,iice),          &
-                               arr_mui(i,k,iice),diag_rhoi(i,k,iice),rime_frac(i,k,iice))
-                           endif
-                        endif
-                        !here, surface temperature is a proxy for the likelihood of hail being physically reasonable
-                        tmp1 = merge(1., 0., t_tmp.lt.283.15)
-                        Q_pellets(i,k,iice) = qitot(i,k,iice)*tmp1
-                        Q_hail(i,k,iice)    = qitot(i,k,iice)*(1.-tmp1)
-                      endif
-                   endif
-                endif
+                            if (rimedensity(i,k,iice).lt.850) then
+                                Q_grpl(i,k,iice) = qitot(i,k,iice)
+                            else
+                                if (t_tmp.lt.283.15) then
+                                    Q_pellets(i,k,iice) = qitot(i,k,iice)
+                                else
+                                    Q_hail(i,k,iice) = qitot(i,k,iice)
+                                    if (log_typeDiags) then
+                                        diag_dhmax(i,k,iice) = maxHailSize(rho(i,k), nitot(i,k,iice),rhofaci(i,k),arr_lami(i,k,iice), &
+                                                                        arr_mui(i,k,iice),diag_rhoi(i,k,iice),rime_frac(i,k,iice))
+                                    endif
+                                endif ! temperature
+                            endif ! rimedensity
+                        endif ! rimfrac
+                    endif ! liqfrac
 
-             endif !qitot-qiliq>0
+                    diag_3d(i,k,4) = Q_crystals(i,k,iice)
+                    diag_3d(i,k,5) = Q_snow(i,k,iice)
+                    diag_3d(i,k,6) = Q_wsnow(i,k,iice)
+                    diag_3d(i,k,7) = Q_grpl(i,k,iice)
+                    diag_3d(i,k,8) = Q_hail(i,k,iice)
+                    diag_3d(i,k,9) = Q_pellets(i,k,iice)
 
-          enddo k_loop_typdiag_2
+                endif !qitot-qiliq>0
+            enddo k_loop_typdiag_2
 
-         !diagnostics for sfc precipitation rates: (liquid-equivalent volume flux, m s-1)
-         !  note: these are summed for all ice categories
-          if (Q_crystals(i,kbot,iice) .gt. 0.)    then
-             prt_crys(i) = prt_crys(i) + prt_soli(i,iice)   !precip rate of small crystals
-          elseif (Q_snow(i,kbot,iice) .gt. 0.)  then
-             prt_snow(i) = prt_snow(i) + prt_soli(i,iice)   !precip rate of snow
-          elseif (Q_wsnow(i,kbot,iice) .gt. 0.)  then
-             prt_wsnow(i) = prt_wsnow(i) + prt_soli(i,iice) !precip rate of wsnow (wet low-rimed snow)
-          elseif (Q_grpl(i,kbot,iice) .gt. 0.)    then
-             prt_grpl(i) = prt_grpl(i) + prt_soli(i,iice)   !precip rate of graupel
-          elseif (Q_pellets(i,kbot,iice) .gt. 0.) then
-             prt_pell(i) = prt_pell(i) + prt_soli(i,iice)   !precip rate of ice pellets
-          elseif (Q_hail(i,kbot,iice) .gt. 0.)    then
-             prt_hail(i) = prt_hail(i) + prt_soli(i,iice)   !precip rate of hail
-          endif
-
-          !precip rate of unmelted total "snow":
-          !  For now, an instananeous solid-to-liquid ratio (tmp1) is assumed and is multiplied
-          !  by the total liquid-equivalent precip rates of snow (small crystals + lightly-rime + ..)
-          !  Later, this can be computed explicitly as the volume flux of unmelted ice.
-         !tmp1 = 10.  !assumes 10:1 ratio
-         !tmp1 = 1000./max(1., diag_rhoi(i,kbot,iice))
-          tmp1 = 1000./max(1., 5.*diag_rhoi(i,kbot,iice))
-          ! Should we add prt_hail and prt_pell here
-          prt_sndp(i) = prt_sndp(i) + tmp1*(prt_crys(i) + prt_snow(i) + prt_grpl(i))
-
-       enddo iice_loop_diag
-
+            !diagnostics for sfc precipitation rates: (liquid-equivalent volume flux, m s-1)
+            !  note: these are summed for all ice categories
+            if (Q_crystals(i,kbot,iice) .gt. 0.) then
+                diag_2d(i,4) = prt_soli(i,iice) ! precip rate of small crystals
+            elseif (Q_snow(i,kbot,iice) .gt. 0.) then
+                diag_2d(i,5) = prt_soli(i,iice) ! precip rate of snow
+            elseif (Q_wsnow(i,kbot,iice) .gt. 0.) then
+                diag_2d(i,6) = prt_soli(i,iice) ! precip rate of wsnow (wet low-rimed snow)
+            elseif (Q_grpl(i,kbot,iice) .gt. 0.) then
+                diag_2d(i,7) = prt_soli(i,iice) ! precip rate of graupel
+            elseif (Q_pellets(i,kbot,iice) .gt. 0.) then
+                diag_2d(i,8) = prt_soli(i,iice) ! precip rate of ice pellets
+            elseif (Q_hail(i,kbot,iice) .gt. 0.) then
+                diag_2d(i,9) = prt_soli(i,iice) ! precip rate of hail
+            endif
+        enddo iice_loop_diag
     enddo i_loop_typediag
-
-   !- for output of 3D fields of diagnostic ice-phase hydrometeor type
-    if (ktop_typeDiag==ktop .and. present(qi_type)) then
-      !diag_3d(:,:,1) = Q_drizzle(:,:)
-      !diag_3d(:,:,2) = Q_rain(:,:)
-       do ii = 1,nCat
-          qi_type(:,:,1) = qi_type(:,:,1) + Q_crystals(:,:,ii)
-          qi_type(:,:,2) = qi_type(:,:,2) + Q_snow(:,:,ii)
-          qi_type(:,:,3) = qi_type(:,:,3) + Q_wsnow(:,:,ii)
-          qi_type(:,:,4) = qi_type(:,:,4) + Q_grpl(:,:,ii)
-          qi_type(:,:,5) = qi_type(:,:,5) + Q_hail(:,:,ii)
-          qi_type(:,:,6) = qi_type(:,:,6) + Q_pellets(:,:,ii)
-       enddo
-    endif
-
  endif compute_type_diags
+!! << JM_20260813
 
+!  compute_type_diags: if (log_typeDiags .and. (trim(model)=='GEM'.or.trim(model)=='KIN1D')) then
+
+!     if (.not.(present(prt_drzl).and.present(prt_rain).and.present(prt_crys).and.         &
+!               present(prt_snow).and.present(prt_grpl).and.present(prt_pell).and.         &
+!               present(prt_hail).and.present(prt_sndp))) then
+!        print*,'***  ABORT IN P3_MAIN ***'
+!        print*,'*  typeDiags_ON = .true. but prt_drzl, etc. are not passed into P3_MAIN'
+!        print*,'*************************'
+!        global_status = STATUS_ERROR
+!        return
+!     endif
+
+!     prt_drzl(:) = 0.
+!     prt_rain(:) = 0.
+!     prt_crys(:) = 0.
+!     prt_snow(:) = 0.
+!     prt_grpl(:) = 0.
+!     prt_pell(:) = 0.
+!     prt_hail(:) = 0.
+!     prt_sndp(:) = 0.
+!     prt_wsnow(:) = 0.
+
+!     if (present(qi_type)) qi_type(:,:,:) = 0.
+
+!    ! compute hydrometeor type diagnostics for full columns on output timesteps only;
+!    ! otherwise only calculate at bottom level (for precipitation rates)
+!     ktop_typeDiag = merge(ktop, kbot, log_outputStep)
+
+!     i_loop_typediag: do i = its,ite
+
+!       !-- rain vs. drizzle:
+!        k_loop_typdiag_1: do k = kbot,ktop_typeDiag,kdir
+
+!           Q_drizzle(i,k) = 0.
+!           Q_rain(i,k)    = 0.
+!           !note:  these can be broken down further (outside of microphysics) into
+!           !       liquid rain (drizzle) vs. freezing rain (drizzle) based on sfc temp.
+!           if (qr(i,k).ge.qsmall .and. nr(i,k).ge.nsmall) then
+! !              if (tmp1 < thres_raindrop) then
+! !                 Q_drizzle(i,k) = qr(i,k)
+! !              else
+! !                 Q_rain(i,k)    = qr(i,k)
+! !              endif
+!              tmp2 = merge(1., 0., tmp1 < thres_raindrop) !1. for drizzle, 0. for rain
+!              Q_drizzle(i,k) = qr(i,k)*tmp2
+!              Q_rain(i,k)    = qr(i,k)*(1.-tmp2)
+!           endif
+
+!        enddo k_loop_typdiag_1
+
+! !        if (Q_drizzle(i,kbot) > 0.) then
+! !           prt_drzl(i) = prt_liq(i)
+! !        elseif (Q_rain(i,kbot) > 0.) then
+! !           prt_rain(i) = prt_liq(i)
+! !        endif
+!        tmp1 = merge(1., 0., Q_drizzle(i,kbot) > 0.)
+!        prt_drzl(i) = prt_liq(i)*tmp1
+!        prt_rain(i) = prt_liq(i)*(1.-tmp1)
+
+!       !-- ice-phase:
+!       iice_loop_diag: do iice = 1,nCat
+
+!           k_loop_typdiag_2: do k = kbot,ktop_typeDiag,kdir
+
+!              Q_crystals(i,k,iice) = 0.
+!              Q_snow(i,k,iice)     = 0.
+!              Q_wsnow(i,k,iice)    = 0.
+!              Q_grpl(i,k,iice)     = 0.
+!              Q_pellets(i,k,iice)  = 0.
+!              Q_hail(i,k,iice)     = 0.
+!              liq_frac(i,k,iice)   = 0.
+!              rime_frac(i,k,iice)  = 0.
+!              rimedensity(i,k,iice) = 0.
+
+!              if ((qitot(i,k,iice)-qiliq(i,k,iice)).ge.qsmall) then
+
+!                 rime_frac(i,k,iice) = qirim(i,k,iice)/(qitot(i,k,iice)-               &
+!                                          qiliq(i,k,iice))                     ! rime mass fraction
+!                 t_tmp   = th(i,kbot)*(pres(i,kbot)*1.e-5)**(rd*i_cp)          ! 1st level temperature
+!                 if (birim(i,k,iice).ge.bsmall) then
+!                    rimedensity(i,k,iice) = qirim(i,k,iice)/birim(i,k,iice)    ! rime density
+!                 endif
+!                 liq_frac(i,k,iice) = qiliq(i,k,iice)/qitot(i,k,iice)          ! liquid fraction
+
+!                 if (liq_frac(i,k,iice).ge.0.15) then
+!                    Q_wsnow(i,k,iice) = qitot(i,k,iice)
+!                 else
+!                    if (rime_frac(i,k,iice).lt.0.6) then
+! !                       if (diag_di(i,k,iice).lt.0.002) then
+! !                          Q_crystals(i,k,iice) = qitot(i,k,iice)
+! !                       else
+! !                          Q_snow(i,k,iice) = qitot(i,k,iice)
+! !                       endif
+!                       tmp1 = merge(1., 0., diag_di(i,k,iice).lt.0.002)
+!                       Q_crystals(i,k,iice) = qitot(i,k,iice)*tmp1
+!                       Q_snow(i,k,iice)     = qitot(i,k,iice)*(1.-tmp1)
+!                    else
+!                       if (rimedensity(i,k,iice).lt.850) then
+!                         Q_grpl(i,k,iice) = qitot(i,k,iice)
+!                       else
+!                         if (t_tmp.lt.283.15) then
+!                            Q_pellets(i,k,iice) = qitot(i,k,iice)
+!                         else
+!                            Q_hail(i,k,iice) = qitot(i,k,iice)
+!                            if (log_typeDiags) then
+!                               diag_dhmax(i,k,iice) = maxHailSize(rho(i,k),               &
+!                                nitot(i,k,iice),rhofaci(i,k),arr_lami(i,k,iice),          &
+!                                arr_mui(i,k,iice),diag_rhoi(i,k,iice),rime_frac(i,k,iice))
+!                            endif
+!                         endif
+!                         !here, surface temperature is a proxy for the likelihood of hail being physically reasonable
+!                         tmp1 = merge(1., 0., t_tmp.lt.283.15)
+!                         Q_pellets(i,k,iice) = qitot(i,k,iice)*tmp1
+!                         Q_hail(i,k,iice)    = qitot(i,k,iice)*(1.-tmp1)
+!                       endif
+!                    endif
+!                 endif
+
+!              endif !qitot-qiliq>0
+
+!           enddo k_loop_typdiag_2
+
+!          !diagnostics for sfc precipitation rates: (liquid-equivalent volume flux, m s-1)
+!          !  note: these are summed for all ice categories
+!           if (Q_crystals(i,kbot,iice) .gt. 0.)    then
+!              prt_crys(i) = prt_crys(i) + prt_soli(i,iice)   !precip rate of small crystals
+!           elseif (Q_snow(i,kbot,iice) .gt. 0.)  then
+!              prt_snow(i) = prt_snow(i) + prt_soli(i,iice)   !precip rate of snow
+!           elseif (Q_wsnow(i,kbot,iice) .gt. 0.)  then
+!              prt_wsnow(i) = prt_wsnow(i) + prt_soli(i,iice) !precip rate of wsnow (wet low-rimed snow)
+!           elseif (Q_grpl(i,kbot,iice) .gt. 0.)    then
+!              prt_grpl(i) = prt_grpl(i) + prt_soli(i,iice)   !precip rate of graupel
+!           elseif (Q_pellets(i,kbot,iice) .gt. 0.) then
+!              prt_pell(i) = prt_pell(i) + prt_soli(i,iice)   !precip rate of ice pellets
+!           elseif (Q_hail(i,kbot,iice) .gt. 0.)    then
+!              prt_hail(i) = prt_hail(i) + prt_soli(i,iice)   !precip rate of hail
+!           endif
+
+!           !precip rate of unmelted total "snow":
+!           !  For now, an instananeous solid-to-liquid ratio (tmp1) is assumed and is multiplied
+!           !  by the total liquid-equivalent precip rates of snow (small crystals + lightly-rime + ..)
+!           !  Later, this can be computed explicitly as the volume flux of unmelted ice.
+!          !tmp1 = 10.  !assumes 10:1 ratio
+!          !tmp1 = 1000./max(1., diag_rhoi(i,kbot,iice))
+!           tmp1 = 1000./max(1., 5.*diag_rhoi(i,kbot,iice))
+!           ! Should we add prt_hail and prt_pell here
+!           prt_sndp(i) = prt_sndp(i) + tmp1*(prt_crys(i) + prt_snow(i) + prt_grpl(i))
+
+!        enddo iice_loop_diag
+
+!     enddo i_loop_typediag
+
+!    !- for output of 3D fields of diagnostic ice-phase hydrometeor type
+!     if (ktop_typeDiag==ktop .and. present(qi_type)) then
+!       !diag_3d(:,:,1) = Q_drizzle(:,:)
+!       !diag_3d(:,:,2) = Q_rain(:,:)
+!        do ii = 1,nCat
+!           qi_type(:,:,1) = qi_type(:,:,1) + Q_crystals(:,:,ii)
+!           qi_type(:,:,2) = qi_type(:,:,2) + Q_snow(:,:,ii)
+!           qi_type(:,:,3) = qi_type(:,:,3) + Q_wsnow(:,:,ii)
+!           qi_type(:,:,4) = qi_type(:,:,4) + Q_grpl(:,:,ii)
+!           qi_type(:,:,5) = qi_type(:,:,5) + Q_hail(:,:,ii)
+!           qi_type(:,:,6) = qi_type(:,:,6) + Q_pellets(:,:,ii)
+!        enddo
+!     endif
+
+!  endif compute_type_diags
 
  diag_visibility: if (present(diag_vis)  .and. present(diag_vis1) .and.                  &
                       present(diag_vis1) .and. present(diag_vis2)) then
@@ -13588,7 +13701,7 @@ else
    endif
 
    ! Assumptions: These values are choosen with respect to the Eq. (1) and FIG1 (e) in Phillips: n_total <= 10**2 and n_big <= 10**0 for D=1.6mm AND
-   !              using d_drop_mm = 5.0mm: n_total < 220, n_small_frag < 220 and n_big_frag < 1.0
+   !              using d_drop_mm = 5.0mm: n_small_frag < 220 and n_big_frag < 1.0
    !              They can be modified if needed
    n_small_frag = max(min(n_small_frag, 219.), 0.0)
    n_big_frag   = max(min(n_big_frag, 1.0), 0.0)
@@ -13603,7 +13716,7 @@ else
  ! Calculates the total number of splashes through collision of rain drop  -
  ! with bigger ice particles (m < mi)
  ! 
- ! Parameters:
+ ! Input parameters:
  !   - tempk:  ambient air temperature [K]
  !   - d_rain: mean rain drop diameter [m]
  !   - m_rain: mean rain drop mass [kg]

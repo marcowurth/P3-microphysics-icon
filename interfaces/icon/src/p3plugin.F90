@@ -131,6 +131,30 @@ CONTAINS
     CALL create_var('dhmax', 'm', '3d', 'dp', 'maximum hail size')
     CALL create_var('dhmax_ground', 'm', '2d', 'dp', 'maximum hail size at ground')
     CALL create_var('ze_p3', 'dBZ', '3d', 'dp', 'equivalent reflectivity')
+
+!! JM_20260728 >> create new diagnostic variables for precipitation rates and hydrometeor types
+    ! warm- and ice-phase precipitation rates
+    CALL create_var('prt_cld',     'm s-1',   '2d', 'dp', 'precipitation rate of cloud water')
+    CALL create_var('prt_drzl',    'm s-1',   '2d', 'dp', 'precipitation rate of drizzle')
+    CALL create_var('prt_rain',    'm s-1',   '2d', 'dp', 'precipitation rate of rain')
+    CALL create_var('prt_crys',    'm s-1',   '2d', 'dp', 'precipitation rate of ice crystals')
+    CALL create_var('prt_snow',    'm s-1',   '2d', 'dp', 'precipitation rate of snow')
+    CALL create_var('prt_wsnow',   'm s-1',   '2d', 'dp', 'precipitation rate of very wet snow')
+    CALL create_var('prt_grpl',    'm s-1',   '2d', 'dp', 'precipitation rate of graupel')
+    CALL create_var('prt_pell',    'm s-1',   '2d', 'dp', 'precipitation rate of pellets')
+    CALL create_var('prt_hail',    'm s-1',   '2d', 'dp', 'precipitation rate of hail')
+    ! warm- and ice-phase hydrometeor types
+    CALL create_var('q_cld',       'kg kg-1', '3d', 'dp', 'mass mixing ratio of cloud water')
+    CALL create_var('q_drzl',      'kg kg-1', '3d', 'dp', 'mass mixing ratio of drizzle')
+    CALL create_var('q_rain',      'kg kg-1', '3d', 'dp', 'mass mixing ratio of rain')
+    CALL create_var('qi_crys',     'kg kg-1', '3d', 'dp', 'mass mixing ratio of small ice crystals')
+    CALL create_var('qi_snow',     'kg kg-1', '3d', 'dp', 'mass mixing ratio of unrimed snow')
+    CALL create_var('qi_wsnow',    'kg kg-1', '3d', 'dp', 'mass mixing ratio of wet snow')
+    CALL create_var('qi_grpl',     'kg kg-1', '3d', 'dp', 'mass mixing ratio of graupel')
+    CALL create_var('qi_pell',     'kg kg-1', '3d', 'dp', 'mass mixing ratio of ice pellets')
+    CALL create_var('qi_hail',     'kg kg-1', '3d', 'dp', 'mass mixing ratio of hail')
+!! << JM_20260728
+
 !! JM_20260323 >> create new 2-moment warm-phase diagnostic variables (need to be adjusted here when adding more diagnostics)
     CALL create_var('d_qcnuc', 'kg kg-1', '3d', 'dp', 'activation of cloud droplets from CCN')
     CALL create_var('d_qccon', 'kg kg-1', '3d', 'dp', 'cloud droplet condensation')
@@ -406,6 +430,27 @@ CONTAINS
     CALL comin_var_get([ep_init, ep_out], t_comin_var_descriptor('ice_gsp', id), IOR(FR, FW), mp_vars%ice_gsp)
     !CALL comin_var_get([ep_mp], t_comin_var_descriptor('q_sedim', id), IOR(FR, FW), mp_vars%q_sedim)
     !CALL comin_var_get([ep_mp], t_comin_var_descriptor('twater', id), IOR(FR, FW), mp_vars%twater)
+
+!! JM_20260728 >> register new diagnostic variables for precipitation rates and hydrometeor types in mp_vars
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prt_cld', id), IOR(FR, FW), mp_vars%prt_cld)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prt_drzl', id), IOR(FR, FW), mp_vars%prt_drzl)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prt_rain', id), IOR(FR, FW), mp_vars%prt_rain)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prt_crys', id), IOR(FR, FW), mp_vars%prt_crys)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prt_snow', id), IOR(FR, FW), mp_vars%prt_snow)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prt_wsnow', id), IOR(FR, FW), mp_vars%prt_wsnow)    
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prt_grpl', id), IOR(FR, FW), mp_vars%prt_grpl)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prt_pell', id), IOR(FR, FW), mp_vars%prt_pell)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('prt_hail', id), IOR(FR, FW), mp_vars%prt_hail)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('q_cld', id), IOR(FR, FW), mp_vars%q_cld)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('q_drzl', id), IOR(FR, FW), mp_vars%q_drzl)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('q_rain', id), IOR(FR, FW), mp_vars%q_rain)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('qi_crys', id), IOR(FR, FW), mp_vars%qi_crys)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('qi_snow', id), IOR(FR, FW), mp_vars%qi_snow)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('qi_wsnow', id), IOR(FR, FW), mp_vars%qi_wsnow)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('qi_grpl', id), IOR(FR, FW), mp_vars%qi_grpl)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('qi_pell', id), IOR(FR, FW), mp_vars%qi_pell)
+    CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('qi_hail', id), IOR(FR, FW), mp_vars%qi_hail)
+!! << JM_20260728
 
 !! JM_20260323 >> register new 2-moment warm-phase diagnostics (need to be adjusted here when adding more diagnostics)
     CALL comin_var_get([ep_mp, ep_out], t_comin_var_descriptor('d_qcnuc', id), IOR(FR, FW), p3_diag_wrm_2mom%d_qcnuc)

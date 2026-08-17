@@ -36,6 +36,10 @@ MODULE p3plugin_types
     TYPE(t_comin_var_handle)            :: prec_gsp_rate, rain_gsp_rate, snow_gsp_rate, ice_gsp_rate
     TYPE(t_comin_var_handle)            :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp, ice_gsp
     TYPE(t_comin_var_handle)            :: q_sedim, twater
+!! JM_20260728 >> adding new precipitation rates and ice-phase hydrometeor types to mp_vars_handle
+    TYPE(t_comin_var_handle)            :: prt_cld, prt_drzl, prt_rain, prt_crys, prt_snow, prt_wsnow, prt_grpl, prt_pell, prt_hail
+    TYPE(t_comin_var_handle)            :: q_cld, q_drzl, q_rain, qi_crys, qi_snow, qi_wsnow, qi_grpl, qi_pell, qi_hail
+!! << JM_20260728
   END type t_mp_vars_handle
 
   TYPE :: t_mp_vars_3dptr
@@ -44,6 +48,10 @@ MODULE p3plugin_types
     REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp_rate, rain_gsp_rate, snow_gsp_rate, ice_gsp_rate
     REAL(wp), POINTER, DIMENSION(:,:,:) :: prec_gsp, prec_gsp_d, rain_gsp, snow_gsp, ice_gsp
     REAL(wp), POINTER, DIMENSION(:,:,:) :: q_sedim, twater
+!! JM_20260728 >> adding new precipitation rates and ice-phase hydrometeor types to mp_vars_3dptr
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: prt_cld, prt_drzl, prt_rain, prt_crys, prt_snow, prt_wsnow, prt_grpl, prt_pell, prt_hail
+    REAL(wp), POINTER, DIMENSION(:,:,:) :: q_cld, q_drzl, q_rain, qi_crys, qi_snow, qi_wsnow, qi_grpl, qi_pell, qi_hail
+!! << JM_20260728
   CONTAINS
     PROCEDURE :: nullify => nullify_mp_vars_3dptr
   END type t_mp_vars_3dptr
@@ -159,6 +167,10 @@ CONTAINS
     NULLIFY(this%prec_gsp_rate, this%rain_gsp_rate, this%snow_gsp_rate, this%ice_gsp_rate)
     NULLIFY(this%prec_gsp, this%prec_gsp_d, this%rain_gsp, this%snow_gsp, this%ice_gsp)
     NULLIFY(this%q_sedim, this%twater)
+!! JM_20260728 >> nullify new precipitation rates and ice-phase hydrometeor types in mp_vars_3dptr
+    NULLIFY(this%prt_cld, this%prt_drzl, this%prt_rain, this%prt_crys, this%prt_snow, this%prt_wsnow, this%prt_grpl, this%prt_pell, this%prt_hail)
+    NULLIFY(this%q_cld, this%q_drzl, this%q_rain, this%qi_crys, this%qi_snow, this%qi_wsnow, this%qi_grpl, this%qi_pell, this%qi_hail)
+!! << JM_20260728
   END SUBROUTINE nullify_mp_vars_3dptr
 
   SUBROUTINE nullify_p3_vars_3dptr(this)
