@@ -1,9 +1,9 @@
 
 MODULE p3plugin_tracer_lbc
-  USE comin_plugin_interface,  ONLY : comin_parallel_get_host_mpi_rank, comin_descrdata_get_cell_indices
+  USE comin_plugin_interface,  ONLY : comin_descrdata_get_cell_indices
 
   USE p3plugin_types,          ONLY : t_icon_tracer_3dptr, t_p3_tracer_3dptr
-  USE p3plugin_global_vars,    ONLY : n_icecat, p_global, p_patch, icon_tracer, p3_tracer
+  USE p3plugin_global_vars,    ONLY : rank_world, n_icecat, p_global, p_patch, icon_tracer, p3_tracer
 
   IMPLICIT NONE
   PRIVATE
@@ -24,15 +24,14 @@ CONTAINS
   SUBROUTINE update_lbc_ice_after_nudging()  BIND(C)
 
     INTEGER  :: jg, jb, jk, jc
-    INTEGER  :: rank, i_icecat, i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
+    INTEGER  :: i_icecat, i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
     REAL(wp) :: qi_sum
     REAL(wp) :: qsmall = 1.0e-12    ! minimum threshold in kg/kg
 
     TYPE(t_icon_tracer_3dptr) :: icon_tracer_3d
     TYPE(t_p3_tracer_3dptr)   :: p3_tracer_3d(n_icecat)
 
-    rank = comin_parallel_get_host_mpi_rank()
-    IF (rank == 0) WRITE (0,*) 'update qitot_x values by changes of nudging'
+    IF (rank_world == 0) WRITE (0,*) 'update qitot_x values by changes of nudging'
 
     CALL icon_tracer%qi%to_3d(icon_tracer_3d%qi)
 

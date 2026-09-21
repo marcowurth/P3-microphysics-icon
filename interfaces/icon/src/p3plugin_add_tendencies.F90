@@ -1,9 +1,9 @@
 
 MODULE p3plugin_add_tendencies
-  USE comin_plugin_interface,  ONLY : comin_parallel_get_host_mpi_rank, comin_descrdata_get_cell_indices
+  USE comin_plugin_interface,  ONLY : comin_descrdata_get_cell_indices
 
   USE p3plugin_types,          ONLY : t_icon_tracer_3dptr, t_p3_tracer_3dptr
-  USE p3plugin_global_vars,    ONLY : n_icecat, l3mom_ice, lliqfrac, dtime, p_global, p_patch,             &
+  USE p3plugin_global_vars,    ONLY : rank_world, n_icecat, l3mom_ice, lliqfrac, dtime, p_global, p_patch, &
     &                                 icon_tracer, p3_tracer,                                              &
     &                                 icon_tracer_ddt_turb, p3_tracer_ddt_turb
 
@@ -25,13 +25,12 @@ CONTAINS
   SUBROUTINE add_turb_tendencies()  BIND(C)
 
     INTEGER :: jg, jb, jk, jc
-    INTEGER :: rank, i_icecat, i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
+    INTEGER :: i_icecat, i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
 
     TYPE(t_icon_tracer_3dptr) :: icon_tracer_3d, icon_tracer_ddt_turb_3d
     TYPE(t_p3_tracer_3dptr)   :: p3_tracer_3d(n_icecat), p3_tracer_ddt_turb_3d(n_icecat)
 
-    rank = comin_parallel_get_host_mpi_rank()
-    IF (rank == 0) WRITE (0,*) 'update turbulence tendencies of tracers'
+    IF (rank_world == 0) WRITE (0,*) 'update turbulence tendencies of tracers'
 
     CALL icon_tracer%qnc%to_3d(icon_tracer_3d%qnc)
     CALL icon_tracer%qnr%to_3d(icon_tracer_3d%qnr)

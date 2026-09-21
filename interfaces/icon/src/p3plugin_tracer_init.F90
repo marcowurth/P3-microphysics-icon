@@ -1,19 +1,24 @@
 
 MODULE p3plugin_tracer_init
-  !USE omp_lib
+  USE mpi,                     ONLY : MPI_Wtime, MPI_Bcast, MPI_Scatter, MPI_INT, MPI_REAL, MPI_LOGICAL
+
   USE netcdf,                  ONLY : nf90_open, nf90_close, nf90_inq_dimid, nf90_inquire,                  &
     &                                 nf90_inq_varid, nf90_inquire_variable, nf90_inquire_dimension,        &
     &                                 nf90_get_var, NF90_FLOAT, NF90_DOUBLE,                                &
     &                                 NF90_NOWRITE, NF90_NOERR, NF90_MAX_VAR_DIMS
 
-  USE comin_plugin_interface,  ONLY : comin_parallel_get_host_mpi_rank, comin_descrdata_get_timesteplength, &
-    &                                 comin_descrdata_get_cell_indices, comin_plugin_finish
+  USE comin_plugin_interface,  ONLY : comin_descrdata_get_timesteplength, comin_descrdata_get_cell_indices, &
+    &                                 comin_plugin_finish
 
+  USE p3plugin_utils,          ONLY : uppercase, lowercase
   USE p3plugin_types,          ONLY : t_dyn_vars_3dptr, t_icon_tracer_3dptr, t_mp_vars_3dptr,               &
     &                                 t_p3_tracer_3dptr
-  USE p3plugin_global_vars,    ONLY : dtime, fastphystep, n_icecat, itracer_ini, l3mom_ice, lliqfrac,  &
+  USE p3plugin_global_vars,    ONLY : comm_world, comm_insidenode, rank_world, rank_insidenode,             &
+    &                                 numprocs_insidenode, max_patch_size,                                  &
+    &                                 node_patches_sizes, node_patches_idx,                                 &
+    &                                 dtime, fastphystep, n_icecat, itracer_ini, l3mom_ice, lliqfrac,       &
     &                                 tracer_ini_filename, lookup_tables_path, p_global, p_patch,           &
-    &                                 dyn_vars, icon_tracer, mp_vars, p3_tracer
+    &                                 dyn_vars, icon_tracer, mp_vars, p3_tracer, autoAccr_param_in
 
   USE microphy_p3,             ONLY : p3_init, status_ok
 
@@ -35,9 +40,10 @@ CONTAINS
     LOGICAL           :: abort_on_err = .TRUE.
     LOGICAL           :: dowr         = .FALSE.
     LOGICAL           :: lvarfound, l3mom_ice_ini, lliqfrac_ini
-    INTEGER           :: stat, rank, i_icecat, n_icecat_ini
-    INTEGER           :: jg, jb, jk, jc, jglobal
+    INTEGER           :: stat, i_icecat, n_icecat_ini
+    INTEGER           :: jg, jb, jk, jc
     INTEGER           :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
+    DOUBLE PRECISION  :: start, finish
     REAL              :: dmean_qc, dmean_qr, dmean_qi, dmean_qs, dmean_qg
     REAL              :: magicfac_qi, magicfac_qs, magicfac_qg
     REAL              :: rhow, rhop_qi, rhop_qs, rhop_qg, rhor_qs, rhor_qg
@@ -60,10 +66,9 @@ CONTAINS
     TYPE(t_dyn_vars_3dptr)    :: dyn_vars_3d
     TYPE(t_mp_vars_3dptr)     :: mp_vars_3d
 
-    rank = comin_parallel_get_host_mpi_rank()
-    IF (rank == 0) WRITE (0,*) 'call p3_init'
+    IF (rank_world == 0) WRITE (0,*) 'call p3_init'
 
-    CALL p3_init(TRIM(lookup_tables_path), n_icecat, l3mom_ice, lliqfrac, model, stat, abort_on_err, dowr)
+    CALL p3_init(TRIM(lookup_tables_path), n_icecat, l3mom_ice, lliqfrac, model, stat, abort_on_err, dowr, autoAccr_param_in)
     IF (stat /= status_ok) CALL comin_plugin_finish('init_p3_and_tracer (p3plugin)', 'calling failed!')
 
     dtime = comin_descrdata_get_timesteplength(1)
@@ -92,13 +97,14 @@ CONTAINS
       ENDIF
     END DO
 
+    start = MPI_Wtime()
 
     SELECT CASE (itracer_ini)
     CASE (0)
-      IF (rank == 0) WRITE (0,*) 'initialize without clouds and precipitation, "dry"'
+      IF (rank_world == 0) WRITE (0,*) 'initialize without clouds and precipitation, "dry"'
 
     CASE (1)
-      IF (rank == 0) WRITE (0,*) 'initialize from 1M-scheme mass tracers qc, qr, qi, qs and if available qg'
+      IF (rank_world == 0) WRITE (0,*) 'initialize from 1M-scheme mass tracers qc, qr, qi, qs and if available qg'
 
       dmean_qc    = 15.e-6   ! number-mean diameter in m
       dmean_qr    = 600e-6   ! number-mean diameter in m (P3's internal upper limit is 1/inv_Drmax=2mm)
@@ -128,20 +134,20 @@ CONTAINS
       CALL dyn_vars%hfl%to_3d(dyn_vars_3d%hfl)
       hfl_3dpatch = dyn_vars_3d%hfl
 
-      CALL read_vinterp_ini_var(tracer_ini_filename, 'QR', hfl_3dpatch, qr_ini_3dpatch)
-      CALL read_vinterp_ini_var(tracer_ini_filename, 'QS', hfl_3dpatch, qs_ini_3dpatch)
+      CALL read_vinterp_ini_var(tracer_ini_filename, 'qr', hfl_3dpatch, qr_ini_3dpatch)
+      CALL read_vinterp_ini_var(tracer_ini_filename, 'qs', hfl_3dpatch, qs_ini_3dpatch)
 
-      CALL query_file_for_var(tracer_ini_filename, 'QG', lvarfound)
+      CALL query_file_for_var(tracer_ini_filename, 'qg', lvarfound)
 
       IF (lvarfound) THEN
-        IF (rank == 0) WRITE (0,*) 'found tracer qg in tracer_ini_filename, reading it in...'
-        CALL read_vinterp_ini_var(tracer_ini_filename, 'QG', hfl_3dpatch, qg_ini_3dpatch)
+        IF (rank_world == 0) WRITE (0,*) 'found tracer qg in tracer_ini_filename, reading it in...'
+        CALL read_vinterp_ini_var(tracer_ini_filename, 'qg', hfl_3dpatch, qg_ini_3dpatch)
       ELSE
-        IF (rank == 0) WRITE (0,*) 'did not find tracer qg in tracer_ini_filename, initialize P3 ice with qi & qs only'
+        IF (rank_world == 0) WRITE (0,*) 'did not find tracer qg in tracer_ini_filename, initialize P3 ice with qi & qs only'
       ENDIF
 
     CASE (3)
-      IF (rank == 0) WRITE (0,*) 'initialize from P3 tracers'
+      IF (rank_world == 0) WRITE (0,*) 'initialize from P3 tracers'
 
       ALLOCATE(hfl_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
       ALLOCATE(qnc_ini_3dpatch(p_global%nproma, p_patch%nlev, p_patch%cells%nblks))
@@ -152,7 +158,7 @@ CONTAINS
       hfl_3dpatch = dyn_vars_3d%hfl
 
       CALL read_vinterp_ini_var(tracer_ini_filename, 'qnc', hfl_3dpatch, qnc_ini_3dpatch)
-      CALL read_vinterp_ini_var(tracer_ini_filename, 'QR', hfl_3dpatch, qr_ini_3dpatch)
+      CALL read_vinterp_ini_var(tracer_ini_filename, 'qr', hfl_3dpatch, qr_ini_3dpatch)
       CALL read_vinterp_ini_var(tracer_ini_filename, 'qnr', hfl_3dpatch, qnr_ini_3dpatch)
 
       n_icecat_ini = 0
@@ -162,12 +168,12 @@ CONTAINS
         IF (lvarfound) n_icecat_ini = i_icecat
       END DO
 
-      IF (rank == 0) WRITE (0,'(a,i0)') 'found number of P3 ice categories in tracer_ini_filename: ', n_icecat_ini
+      IF (rank_world == 0) WRITE (0,'(a,i0)') 'found number of P3 ice categories in tracer_ini_filename: ', n_icecat_ini
       IF (n_icecat < n_icecat_ini) THEN
-        IF (rank == 0) WRITE (0,*) 'found more ini P3 ice categories than used in this model run, will ignore additional fields'
+        IF (rank_world == 0) WRITE (0,*) 'found more ini P3 ice categories than used in this model run, will ignore additional fields'
       ELSE IF (n_icecat > n_icecat_ini) THEN
         IF (n_icecat_ini == 0) CALL comin_plugin_finish('init_p3_and_tracer (p3plugin)', 'found no P3 ice categories!')
-        IF (rank == 0) WRITE (0,*) 'found less P3 ice categories than used in this model run, will initialize the rest empty'
+        IF (rank_world == 0) WRITE (0,*) 'found less P3 ice categories than used in this model run, will initialize the rest empty'
       ENDIF
 
       l3mom_ice_ini = .FALSE.
@@ -175,9 +181,9 @@ CONTAINS
         CALL query_file_for_var(tracer_ini_filename, 'qzitot_1', lvarfound)
         IF (lvarfound) THEN
           l3mom_ice_ini = .TRUE.
-          IF (rank == 0) WRITE (0,*) 'found qzitot, reading it in...'
+          IF (rank_world == 0) WRITE (0,*) 'found qzitot, reading it in...'
         ELSE
-          IF (rank == 0) WRITE (0,*) 'did not find qzitot, leaving it zero...'
+          IF (rank_world == 0) WRITE (0,*) 'did not find qzitot, leaving it zero...'
         ENDIF
       ENDIF
 
@@ -186,9 +192,9 @@ CONTAINS
         CALL query_file_for_var(tracer_ini_filename, 'qiliq_1', lvarfound)
         IF (lvarfound) THEN
           lliqfrac_ini = .TRUE.
-          IF (rank == 0) WRITE (0,*) 'found qiliq, reading it in...'
+          IF (rank_world == 0) WRITE (0,*) 'found qiliq, reading it in...'
         ELSE
-          IF (rank == 0) WRITE (0,*) 'did not find qiliq, leaving it zero...'
+          IF (rank_world == 0) WRITE (0,*) 'did not find qiliq, leaving it zero...'
         ENDIF
       ENDIF
 
@@ -229,6 +235,9 @@ CONTAINS
 
     END SELECT
 
+    finish = MPI_Wtime()
+    IF (rank_insidenode == 0) &
+     & WRITE (0,'(a,i3,a,F7.3,a)') 'whole file reading with rank_world ', rank_world, ' completed in ', finish - start, 'sec'
 
     jg = 1
     rl_start = p_global%grf_bdywidth_c + 1
@@ -304,7 +313,7 @@ CONTAINS
               p3_tracer_3d(1)%qiliq(jc,jk,jb) = 0.0
             ENDIF
 
-            ! precipitating ice, use two separate icecats if available (n_icecat > 2), merge into one if not
+            ! precipitating ice, use two separate icecats if available (n_icecat > 2), if not merge into one.
             ! in case QG was not in the ini file, qg_ini_3dpatch equals zero and ice category 2 is only snow
             IF (lvarfound == .FALSE.) THEN
               qg_ini_3dpatch(jc,jk,jb) = 0.0
@@ -450,16 +459,25 @@ CONTAINS
     CHARACTER(*), INTENT(IN) :: filename, varname
     LOGICAL, INTENT(OUT)     :: lvarfound
 
-    INTEGER                  :: rank, nc_status, ncid, varid
+    INTEGER                  :: nc_status, ncid, varid, ierr
 
-    ncid = -99
-    nc_status = nf90_open(TRIM(filename), NF90_NOWRITE, ncid)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('query_file_for_var (p3plugin)', 'Could not read file: ' // TRIM(filename))
+    IF (rank_world == 0) THEN
+      ncid = -99
+      nc_status = nf90_open(TRIM(filename), NF90_NOWRITE, ncid)
+      IF (nc_status /= NF90_NOERR) &
+        & CALL comin_plugin_finish('query_file_for_var (p3plugin)', 'Could not read file: ' // TRIM(filename))
 
-    lvarfound = .FALSE.
-    nc_status = nf90_inq_varid(ncid, varname, varid)
-    IF (nc_status == NF90_NOERR) lvarfound = .TRUE.
+      lvarfound = .FALSE.
+      nc_status = nf90_inq_varid(ncid, varname, varid)
+      IF (nc_status /= NF90_NOERR) &
+        & nc_status = nf90_inq_varid(ncid, uppercase(TRIM(varname)), varid)
+      IF (nc_status /= NF90_NOERR) &
+        & nc_status = nf90_inq_varid(ncid, lowercase(TRIM(varname)), varid)
+      IF (nc_status == NF90_NOERR) lvarfound = .TRUE.
+    END IF
+
+    CALL MPI_Bcast(lvarfound, 1, MPI_LOGICAL, 0, comm_world, ierr)
+    IF (ierr /= 0) CALL comin_plugin_finish('MPI_Bcast(lvarfound, 1, MPI_LOGICAL, 0, comm_world) (p3plugin)', 'failed!')
 
   END SUBROUTINE
 
@@ -469,272 +487,332 @@ CONTAINS
     REAL, INTENT(IN)         :: hfl_3dpatch_outlevs(:, :, :)
     REAL, INTENT(OUT)        :: var_3dpatch_outlevs(:, :, :)
 
-    CHARACTER(30)            :: varname_dummy, dimname
-    INTEGER                  :: rank, nc_status, ncid, ncells_global, nlev_in, nlev_in_hhl
-    INTEGER                  :: i, varid, hhlid, xtype, ndims, natts, dimpos_time, dimpos_ncells, dimid_ncells
-    INTEGER                  :: dimids(NF90_MAX_VAR_DIMS), dimlen(NF90_MAX_VAR_DIMS)
-    INTEGER                  :: jg, jb, jk, jc, jglobal
+    DOUBLE PRECISION         :: start, finish
+    CHARACTER(30)            :: dimname
+    INTEGER                  :: nc_status, ncid, dimid_ncells, ncells_global, nlev_in, nlev_in_hhl, ierr
+    INTEGER                  :: i, jg, jb, jk, jc, jlocal
     INTEGER                  :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
-    REAL, ALLOCATABLE        :: varvalues_file_2d(:, :), varvalues_file_3d(:, :, :)
-    REAL, ALLOCATABLE        :: hhlvalues_file_2d(:, :), hhlvalues_file_3d(:, :, :)
-    REAL, ALLOCATABLE        :: var_global_inlevs(:, :), hhl_global_inlevs(:, :), hfl_1d_inlevs(:)
+    REAL, ALLOCATABLE        :: var_patches_padded(:, :, :), hhl_patches_padded(:, :, :)
+    REAL, ALLOCATABLE        :: var_patch_padded(:, :), hhl_patch_padded(:, :)
+    REAL, ALLOCATABLE        :: hfl_1d_inlevs(:)
 
-    rank = comin_parallel_get_host_mpi_rank()
-    !IF (rank == 0) WRITE (0,'(a)') 'read from filename: ', TRIM(filename)
+    ! file reading done by node head process only (therefore once per node)
+    IF (rank_insidenode == 0) THEN
+      IF (rank_world == 0) WRITE (0,'(a,a)') 'read from file, varname: ', TRIM(varname)
+      start = MPI_Wtime()
 
-    ncid = -99
-    nc_status = nf90_open(TRIM(filename), NF90_NOWRITE, ncid)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not read ini file: ' // TRIM(filename))
+      ncid = -99
+      nc_status = nf90_open(TRIM(filename), NF90_NOWRITE, ncid)
+      IF (nc_status /= NF90_NOERR) &
+        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not read ini file: ' // TRIM(filename))
 
-    ! read ncells of ini file and check if equals to icon model's ncells_global
-    nc_status = nf90_inq_dimid(ncid, 'ncells', dimid_ncells)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                               & 'Could not find dimension ncells in ini file!')
-    nc_status = nf90_inquire_dimension(ncid, dimid_ncells, dimname, ncells_global)
-    IF (ncells_global /= p_patch%cells%ncells_global) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                               & 'ncells number of ini file does not match with model!')
-
-    ! read in variable varname and handle dimensions
-    nc_status = nf90_inq_varid(ncid, varname, varid)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                               & 'Could not find variable "' // TRIM(varname) // '" in ini file: ' // TRIM(filename))
-
-    nc_status = nf90_inquire_variable(ncid, varid, varname_dummy, xtype, ndims, dimids, natts)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                               & 'Could not inquire variable: ' // TRIM(varname))
-    IF (xtype /= NF90_DOUBLE .and. xtype /= NF90_FLOAT) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                               & 'Variable type not double or float: ' // TRIM(varname))
-
-    SELECT CASE (ndims)
-    CASE (1)
-      CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                             & 'Variable has only one dimension: ' // TRIM(varname))
-    CASE (2)
-      dimpos_ncells = 0
-      DO i = 1, 2
-        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-        !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
-        IF (TRIM(dimname) == 'time') THEN
-          CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                                 & 'Found dimension "time" in 2d array: ' // TRIM(varname))
-        ELSE IF (TRIM(dimname) == 'ncells') THEN
-          dimpos_ncells = i
-        ELSE
-          nlev_in = dimlen(i)
-        ENDIF
-      END DO
-
-      IF (dimpos_ncells == 0) &
+      ! read ncells of ini file and check if equals to icon model's ncells_global
+      nc_status = nf90_inq_dimid(ncid, 'ncells', dimid_ncells)
+      IF (nc_status /= NF90_NOERR) &
         & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                                 & 'Could not find dimension "ncells" in:' // TRIM(varname))
-
-      ALLOCATE(var_global_inlevs(ncells_global, nlev_in))
-      ALLOCATE(varvalues_file_2d(dimlen(1), dimlen(2)))
-      nc_status = nf90_get_var(ncid, varid, varvalues_file_2d)
-      !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of ' // TRIM(varname)
-      !IF (rank == 0) WRITE (0,'(a,F10.5,F10.5)') 'min max:', minval(varvalues_file_2d), maxval(varvalues_file_2d)
-
-      SELECT CASE (dimpos_ncells)
-      CASE (1)
-        var_global_inlevs(:, :) = varvalues_file_2d(:, :)
-      CASE (2)
-        var_global_inlevs(:, :) = transpose(varvalues_file_2d(:, :))
-      END SELECT
-
-    CASE (3)
-      dimpos_time = 0
-      dimpos_ncells = 0
-      DO i = 1, 3
-        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-        !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
-        IF (TRIM(dimname) == 'time') THEN
-          dimpos_time = i
-          IF (dimlen(i) > 1) THEN
-            IF (rank == 0) WRITE (0,'(a)') 'Reading of 3D var: dimension "time" has more than one time step, choosing the first'
-          ENDIF
-        ELSE IF (TRIM(dimname) == 'ncells') THEN
-          dimpos_ncells = i
-        ELSE
-          nlev_in = dimlen(i)
-        ENDIF
-      END DO
-
-      IF (dimpos_time == 0) &
+                                 & 'Could not find dimension ncells in ini file!')
+      nc_status = nf90_inquire_dimension(ncid, dimid_ncells, dimname, ncells_global)
+      IF (ncells_global /= p_patch%cells%ncells_global) &
         & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                                 & 'Could not find dimension "time" in:' // TRIM(varname))
-      IF (dimpos_ncells == 0) &
-        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                                 & 'Could not find dimension "ncells" in:' // TRIM(varname))
+                                 & 'ncells number of ini file does not match with model!')
 
-      ALLOCATE(var_global_inlevs(ncells_global, nlev_in))
-      ALLOCATE(varvalues_file_3d(dimlen(1), dimlen(2), dimlen(3)))
-      nc_status = nf90_get_var(ncid, varid, varvalues_file_3d)
-      !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of ' // TRIM(varname)
-      !IF (rank == 0) WRITE (0,'(a,F10.5,F10.5)') 'min max:', minval(varvalues_file_3d), maxval(varvalues_file_3d)
+      CALL read_netcdf_nlev(varname, ncid, nlev_in)
+      CALL read_netcdf_nlev('hhl', ncid, nlev_in_hhl)
 
-      SELECT CASE (dimpos_time)
-      CASE (1)
-        IF (dimpos_ncells == 2) THEN
-          var_global_inlevs(:, :) = varvalues_file_3d(1, :, :)
-        ELSE
-          var_global_inlevs(:, :) = transpose(varvalues_file_3d(1, :, :))
-        ENDIF
-      CASE (2)
-        IF (dimpos_ncells == 1) THEN
-          var_global_inlevs(:, :) = varvalues_file_3d(:, 1, :)
-        ELSE
-          var_global_inlevs(:, :) = transpose(varvalues_file_3d(:, 1, :))
-        ENDIF
-      CASE (3)
-        IF (dimpos_ncells == 1) THEN
-          var_global_inlevs(:, :) = varvalues_file_3d(:, :, 1)
-        ELSE
-          var_global_inlevs(:, :) = transpose(varvalues_file_3d(:, :, 1))
-        ENDIF
-      END SELECT
+      ALLOCATE(var_patches_padded(max_patch_size, nlev_in, numprocs_insidenode))
+      ALLOCATE(hhl_patches_padded(max_patch_size, nlev_in_hhl, numprocs_insidenode))
 
-    CASE (4:)
-      CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                             & 'Variable has more than 3 dimensions: ' // TRIM(varname))
-    END SELECT
-    ! end of reading variable
+      CALL read_netcdf_var(varname, ncid, var_patches_padded)
+      CALL read_netcdf_var('hhl', ncid, hhl_patches_padded)
 
+      nc_status = nf90_close(ncid)
+      IF (nc_status /= NF90_NOERR) &
+        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'File closing not successful!')
 
-    ! read in hhl of ini file
-    nc_status = nf90_inq_varid(ncid, 'HHL', hhlid)
-    IF (nc_status /= NF90_NOERR) &
-      & nc_status = nf90_inq_varid(ncid, 'hhl', hhlid)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                               & 'Could not find hhl in ini file: ' // TRIM(filename))
+      finish = MPI_Wtime()
+      WRITE (0,'(a,i3,a,F7.3,a)') 'file reading with rank_world ', rank_world, ' completed in ', finish - start, 'sec'
+    ENDIF
+    ! end of node head reading work
 
-    nc_status = nf90_inquire_variable(ncid, hhlid, varname_dummy, xtype, ndims, dimids, natts)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not inquire hhl!')
-    IF (xtype /= NF90_DOUBLE .and. xtype /= NF90_FLOAT) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'hhl type not double or float!')
+    ! communicate the number of levels, so the other MPI processes can iterate over it
+    CALL MPI_Bcast(nlev_in, 1, MPI_INT, 0, comm_insidenode, ierr)
+    IF (ierr /= 0) CALL comin_plugin_finish('MPI_Bcast(nlev_in, ...) (p3plugin)', 'failed!')
+    CALL MPI_Bcast(nlev_in_hhl, 1, MPI_INT, 0, comm_insidenode, ierr)
+    IF (ierr /= 0) CALL comin_plugin_finish('MPI_Bcast(nlev_in_hhl, ...) (p3plugin)', 'failed!')
 
-    SELECT CASE (ndims)
-    CASE (1)
-      CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'hhl does not have 2 dimensions!')
-    CASE (2)
-      dimpos_ncells = 0
-      DO i = 1, 2
-        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-        !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
-        IF (TRIM(dimname) == 'time') THEN
-          CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Found dimension "time" in 2d array: hhl')
-        ELSE IF (TRIM(dimname) == 'ncells') THEN
-          dimpos_ncells = i
-        ELSE
-          nlev_in_hhl = dimlen(i)
-        ENDIF
-      END DO
-      IF (dimpos_ncells == 0) &
-        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not find dimension "ncells" in hhl!')
-      IF (nlev_in_hhl /= nlev_in+1) &
-        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', &
-                                 & 'Mismatch in vertical dimension shape: nlev(hhl_inifile) /= nlev(var_inifile)+1')
+    ! ! allocate patch fields in all MPI processes inside node
+    ALLOCATE(var_patch_padded(max_patch_size, nlev_in))
+    ALLOCATE(hhl_patch_padded(max_patch_size, nlev_in_hhl))
 
-      ALLOCATE(hhl_global_inlevs(ncells_global, nlev_in_hhl))
-      ALLOCATE(hhlvalues_file_2d(dimlen(1), dimlen(2)))
-      nc_status = nf90_get_var(ncid, hhlid, hhlvalues_file_2d)
-      !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of hhl'
+    ! start = MPI_Wtime()
 
-      SELECT CASE (dimpos_ncells)
-      CASE (1)
-        hhl_global_inlevs(:, :) = hhlvalues_file_2d(:, :)
-      CASE (2)
-        hhl_global_inlevs(:, :) = transpose(hhlvalues_file_2d(:, :))
-      END SELECT
+    DO jk = 1, nlev_in
+      CALL MPI_Scatter(var_patches_padded(:, jk, :), max_patch_size, MPI_REAL, &
+        &              var_patch_padded(:, jk),      max_patch_size, MPI_REAL, 0, comm_insidenode, ierr)
+        IF (ierr /= 0) CALL comin_plugin_finish('MPI_Scatter(var_patches_padded, ...) (p3plugin)', 'failed!')
+    END DO
+    DO jk = 1, nlev_in_hhl
+      CALL MPI_Scatter(hhl_patches_padded(:, jk, :), max_patch_size, MPI_REAL, &
+        &              hhl_patch_padded(:, jk),      max_patch_size, MPI_REAL, 0, comm_insidenode, ierr)
+      IF (ierr /= 0) CALL comin_plugin_finish('MPI_Scatter(hhl_patches_padded, ...) (p3plugin)', 'failed!')
+    END DO
 
-    CASE (3)
-      dimpos_time = 0
-      dimpos_ncells = 0
-      DO i = 1, 3
-        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
-        !IF (rank == 0) WRITE (0,'(a,i2,a,i9)') "dim len of dimid", dimids(i), ", " // TRIM(dimname) // ":", dimlen(i)
-        IF (TRIM(dimname) == 'time') THEN
-          dimpos_time = i
-          IF (dimlen(i) > 1) THEN
-            IF (rank == 0) WRITE (0,'(a)') 'Reading of 3D hhl: dimension "time" has more than one time step, choosing the first'
-          ENDIF
-        ELSE IF (TRIM(dimname) == 'ncells') THEN
-          dimpos_ncells = i
-        ELSE
-          nlev_in_hhl = dimlen(i)
-        ENDIF
-      END DO
-
-      IF (dimpos_time == 0) &
-        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not find dimension "time" in: hhl')
-      IF (dimpos_ncells == 0) &
-        & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Could not find dimension "ncells" in: hhl')
-
-      ALLOCATE(hhl_global_inlevs(ncells_global, nlev_in_hhl))
-      ALLOCATE(hhlvalues_file_3d(dimlen(1), dimlen(2), dimlen(3)))
-      nc_status = nf90_get_var(ncid, hhlid, hhlvalues_file_3d)
-      !IF (rank == 0) WRITE (0,'(a)') 'successfully read values of hhl'
-      !IF (rank == 0) WRITE (0,'(a,F10.5,F10.5)') 'min max:', minval(hhlvalues_file_3d), maxval(hhlvalues_file_3d)
-
-      SELECT CASE (dimpos_time)
-      CASE (1)
-        IF (dimpos_ncells == 2) THEN
-          hhl_global_inlevs(:, :) = hhlvalues_file_3d(1, :, :)
-        ELSE
-          hhl_global_inlevs(:, :) = transpose(hhlvalues_file_3d(1, :, :))
-        ENDIF
-      CASE (2)
-        IF (dimpos_ncells == 1) THEN
-          hhl_global_inlevs(:, :) = hhlvalues_file_3d(:, 1, :)
-        ELSE
-          hhl_global_inlevs(:, :) = transpose(hhlvalues_file_3d(:, 1, :))
-        ENDIF
-      CASE (3)
-        IF (dimpos_ncells == 1) THEN
-          hhl_global_inlevs(:, :) = hhlvalues_file_3d(:, :, 1)
-        ELSE
-          hhl_global_inlevs(:, :) = transpose(hhlvalues_file_3d(:, :, 1))
-        ENDIF
-      END SELECT
-
-    CASE (4:)
-      CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'Variable has more than 3 dimensions: hhl')
-
-    END SELECT
-    ! end of reading hhl
-
-    nc_status = nf90_close(ncid)
-    IF (nc_status /= NF90_NOERR) &
-      & CALL comin_plugin_finish('read_vinterp_ini_var (p3plugin)', 'File closing not successful!')
+    finish = MPI_Wtime()
+    IF (rank_insidenode == 0) &
+     & WRITE (0,'(a,i3,a,F5.3,a)') 'communicating fields with rank_world ', rank_world, ' completed in ', finish - start, 'sec'
 
     ! vertical interpolate from inlevs to model outlevs
     ALLOCATE(hfl_1d_inlevs(nlev_in))
     jg = 1
     rl_start = p_global%grf_bdywidth_c + 1
     rl_end   = p_global%min_rlcell_int
-
     i_startblk = p_patch%cells%start_block(rl_start)
     i_endblk   = p_patch%cells%end_block(rl_end)
 
     DO jb = i_startblk, i_endblk
       CALL comin_descrdata_get_cell_indices(jg, jb, i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end)
       DO jc = i_startidx, i_endidx
-        jglobal = p_patch%cells%glb_index((jb-1)*p_global%nproma+jc)
-        hfl_1d_inlevs(:) = (hhl_global_inlevs(jglobal, 1:nlev_in) + hhl_global_inlevs(jglobal, 2:nlev_in+1)) / 2.
+        jlocal = (jb-1)*p_global%nproma+jc
+        hfl_1d_inlevs(:) = (hhl_patch_padded(jlocal, 1:nlev_in) + hhl_patch_padded(jlocal, 2:nlev_in+1)) / 2.
 
-        CALL vert_intp_linear_1d(hfl_1d_inlevs(:),                var_global_inlevs(jglobal, :), &
-                               & hfl_3dpatch_outlevs(jc, :, jb),  var_3dpatch_outlevs(jc, :, jb))
+        CALL vert_intp_linear_1d(hfl_1d_inlevs(:),               var_patch_padded(jlocal, :),    &
+          &                      hfl_3dpatch_outlevs(jc, :, jb), var_3dpatch_outlevs(jc, :, jb))
       END DO
     END DO
 
+    IF (rank_insidenode == 0) DEALLOCATE(var_patches_padded, hhl_patches_padded)
+    DEALLOCATE(var_patch_padded, hhl_patch_padded, hfl_1d_inlevs)
+
   END SUBROUTINE read_vinterp_ini_var
+
+
+  SUBROUTINE read_netcdf_var(varname, ncid, var_patches_padded)
+    CHARACTER(*), INTENT(IN) :: varname
+    INTEGER, INTENT(IN)      :: ncid
+    REAL, INTENT(INOUT)      :: var_patches_padded(:, :, :)
+
+    INTEGER                  :: i, nc_status, varid, xtype, ndims, natts, ncells_global, dimpos_time, dimpos_ncells, nlev
+    INTEGER                  :: read_start(3), read_count(3)
+    INTEGER                  :: dimids(NF90_MAX_VAR_DIMS), dimlen(NF90_MAX_VAR_DIMS)
+    INTEGER, ALLOCATABLE     :: varglobal_read_first(:, :), varglobal_read_last(:, :)
+    REAL                     :: fillval
+    CHARACTER(30)            :: varname_dummy, dimname
+    LOGICAL                  :: ncells_first
+
+    IF (rank_insidenode /= 0) &
+      & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                               & 'error: calling routine not with node head process!')
+
+    ! read in variable varname and handle dimensions
+    nc_status = nf90_inq_varid(ncid, TRIM(varname), varid)
+    IF (nc_status /= NF90_NOERR) &
+      & nc_status = nf90_inq_varid(ncid, uppercase(TRIM(varname)), varid)
+    IF (nc_status /= NF90_NOERR) &
+      & nc_status = nf90_inq_varid(ncid, lowercase(TRIM(varname)), varid)
+    IF (nc_status /= NF90_NOERR) &
+      & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                               & 'Could not find variable "' // TRIM(varname))
+
+    nc_status = nf90_inquire_variable(ncid, varid, varname_dummy, xtype, ndims, dimids, natts)
+    IF (nc_status /= NF90_NOERR) &
+      & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                               & 'Could not inquire variable: ' // TRIM(varname))
+    IF (xtype /= NF90_DOUBLE .and. xtype /= NF90_FLOAT) &
+      & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                               & 'Variable type not double or float: ' // TRIM(varname))
+
+    fillval = -999.
+
+    SELECT CASE (ndims)
+    CASE (1)
+      CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                             & 'Variable has only one dimension: ' // TRIM(varname))
+    CASE (2)
+      dimpos_ncells = 0
+      DO i = 1, 2
+        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
+        IF (TRIM(dimname) == 'time') THEN
+          CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                                 & 'Found dimension "time" in 2d array: ' // TRIM(varname))
+        ELSE IF (TRIM(dimname) == 'ncells') THEN
+          dimpos_ncells = i
+          ncells_global = dimlen(i)
+        ELSE
+          nlev = dimlen(i)
+        ENDIF
+      END DO
+
+      IF (dimpos_ncells == 0) &
+        & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                                 & 'Could not find dimension "ncells" in:' // TRIM(varname))
+      IF (ncells_global /= p_patch%cells%ncells_global) &
+        & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                                 & 'ncells number of ini file does not match with model!')
+
+      SELECT CASE (dimpos_ncells)
+      CASE (1)
+        ALLOCATE(varglobal_read_first(ncells_global, nlev))
+        nc_status = nf90_get_var(ncid, varid, varglobal_read_first)
+        DO i = 1, numprocs_insidenode
+          var_patches_padded(1:node_patches_sizes(i), :, i) &
+            &  = varglobal_read_first(node_patches_idx(1:node_patches_sizes(i), i), :)
+          var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
+        END DO
+        DEALLOCATE(varglobal_read_first)
+      CASE (2)
+        ALLOCATE(varglobal_read_last(nlev, ncells_global))
+        nc_status = nf90_get_var(ncid, varid, varglobal_read_last)
+        DO i = 1, numprocs_insidenode
+          var_patches_padded(1:node_patches_sizes(i), :, i) &
+            &  = varglobal_read_last(:, node_patches_idx(1:node_patches_sizes(i), i))
+          var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
+        END DO
+        DEALLOCATE(varglobal_read_last)
+      END SELECT
+
+    CASE (3)
+      dimpos_time = 0
+      dimpos_ncells = 0
+      DO i = 1, 3
+        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
+        IF (TRIM(dimname) == 'time') THEN
+          dimpos_time = i
+          IF (dimlen(i) > 1) THEN
+            WRITE (0,'(a)') 'Reading of 3D var: dimension "time" has more than one time step, choosing the first'
+          ENDIF
+        ELSE IF (TRIM(dimname) == 'ncells') THEN
+          dimpos_ncells = i
+          ncells_global = dimlen(i)
+        ELSE
+          nlev = dimlen(i)
+        ENDIF
+      END DO
+
+      IF (dimpos_time == 0) &
+        & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                                 & 'Could not find dimension "time" in:' // TRIM(varname))
+      IF (dimpos_ncells == 0) &
+        & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                                 & 'Could not find dimension "ncells" in:' // TRIM(varname))
+      IF (ncells_global /= p_patch%cells%ncells_global) &
+        & CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                                 & 'ncells number of ini file does not match with model!')
+
+      read_start = (/ 1, 1, 1 /)
+      SELECT CASE (dimpos_ncells)
+      CASE (1)
+        SELECT CASE (dimpos_time)
+        CASE (2)
+          read_count = (/ ncells_global, 1, nlev /)
+        CASE (3)
+          read_count = (/ ncells_global, nlev, 1 /)
+        END SELECT
+        ncells_first = .TRUE.
+      CASE (2)
+        SELECT CASE (dimpos_time)
+        CASE (1)
+          read_count = (/ 1, ncells_global, nlev /)
+          ncells_first = .TRUE.
+        CASE (3)
+          read_count = (/ nlev, ncells_global, 1 /)
+          ncells_first = .FALSE.
+        END SELECT
+      CASE (3)
+        SELECT CASE (dimpos_time)
+        CASE (1)
+          read_count = (/ 1, nlev, ncells_global /)
+        CASE (2)
+          read_count = (/ nlev, 1, ncells_global /)
+        END SELECT
+        ncells_first = .FALSE.
+      END SELECT
+
+      IF (ncells_first) THEN
+        ALLOCATE(varglobal_read_first(ncells_global, nlev))
+        nc_status = nf90_get_var(ncid, varid, varglobal_read_first, start=read_start, count=read_count)
+        DO i = 1, numprocs_insidenode
+          var_patches_padded(1:node_patches_sizes(i), :, i) &
+            &  = varglobal_read_first(node_patches_idx(1:node_patches_sizes(i), i), :)
+          var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
+        END DO
+        DEALLOCATE(varglobal_read_first)
+      ELSE
+        ALLOCATE(varglobal_read_last(nlev, ncells_global))
+        nc_status = nf90_get_var(ncid, varid, varglobal_read_last, start=read_start, count=read_count)
+        DO i = 1, numprocs_insidenode
+          var_patches_padded(1:node_patches_sizes(i), :, i) &
+            &  = varglobal_read_last(:, node_patches_idx(1:node_patches_sizes(i), i))
+          var_patches_padded(node_patches_sizes(i)+1:max_patch_size, :, i) = fillval
+        END DO
+        DEALLOCATE(varglobal_read_last)
+      END IF
+
+    CASE (4:)
+      CALL comin_plugin_finish('read_netcdf_var (p3plugin)', &
+                             & 'Variable has more than 3 dimensions: ' // TRIM(varname))
+    END SELECT
+    ! end of reading variable
+
+  END SUBROUTINE read_netcdf_var
+
+
+  SUBROUTINE read_netcdf_nlev(varname, ncid, nlev)
+    CHARACTER(*), INTENT(IN) :: varname
+    INTEGER, INTENT(IN)      :: ncid
+    INTEGER, INTENT(OUT)     :: nlev
+
+    INTEGER                  :: nc_status, varid, xtype, ndims, natts, i
+    INTEGER                  :: dimids(NF90_MAX_VAR_DIMS), dimlen(NF90_MAX_VAR_DIMS)
+    CHARACTER(30)            :: varname_dummy, dimname
+
+    IF (rank_insidenode /= 0) &
+      & CALL comin_plugin_finish('read_netcdf_nlev (p3plugin)', &
+                               & 'error: calling routine not with node head process!')
+
+    ! read in variable varname and handle dimensions
+    nc_status = nf90_inq_varid(ncid, TRIM(varname), varid)
+    IF (nc_status /= NF90_NOERR) &
+      & nc_status = nf90_inq_varid(ncid, uppercase(TRIM(varname)), varid)
+    IF (nc_status /= NF90_NOERR) &
+      & nc_status = nf90_inq_varid(ncid, lowercase(TRIM(varname)), varid)
+    IF (nc_status /= NF90_NOERR) &
+      & CALL comin_plugin_finish('read_netcdf_nlev (p3plugin)', &
+                               & 'Could not find variable "' // TRIM(varname))
+
+    nc_status = nf90_inquire_variable(ncid, varid, varname_dummy, xtype, ndims, dimids, natts)
+    IF (nc_status /= NF90_NOERR) &
+      & CALL comin_plugin_finish('read_netcdf_nlev (p3plugin)', &
+                               & 'Could not inquire variable: ' // TRIM(varname))
+    IF (xtype /= NF90_DOUBLE .and. xtype /= NF90_FLOAT) &
+      & CALL comin_plugin_finish('read_netcdf_nlev (p3plugin)', &
+                               & 'Variable type not double or float: ' // TRIM(varname))
+
+    SELECT CASE (ndims)
+    CASE (1)
+      CALL comin_plugin_finish('read_netcdf_nlev (p3plugin)', &
+                             & 'Variable has only one dimension: ' // TRIM(varname))
+    CASE (2)
+      DO i = 1, 2
+        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
+        IF (TRIM(dimname) /= 'time' .and. TRIM(dimname) /= 'ncells') THEN
+          nlev = dimlen(i)
+        ENDIF
+      END DO
+
+    CASE (3)
+      DO i = 1, 3
+        nc_status = nf90_inquire_dimension(ncid, dimids(i), dimname, dimlen(i))
+        IF (TRIM(dimname) /= 'time' .and. TRIM(dimname) /= 'ncells') THEN
+          nlev = dimlen(i)
+        ENDIF
+      END DO
+
+    CASE (4:)
+      CALL comin_plugin_finish('read_netcdf_nlev (p3plugin)', &
+                             & 'Variable has more than 3 dimensions: ' // TRIM(varname))
+    END SELECT
+
+  END SUBROUTINE read_netcdf_nlev
 
 
   ! linear vertical interpolation: height levels za -> zb

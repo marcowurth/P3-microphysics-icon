@@ -1,17 +1,18 @@
 
 MODULE p3plugin_utils
-  USE mpi
+  USE mpi,                     ONLY : MPI_Reduce, MPI_REAL, MPI_MAX
 
-  USE comin_plugin_interface,  ONLY : comin_parallel_get_host_mpi_rank, comin_parallel_get_plugin_mpi_comm, &
-    &                                 comin_plugin_finish, t_comin_var_descriptor,                          &
+  USE comin_plugin_interface,  ONLY : comin_plugin_finish, t_comin_var_descriptor,                          &
     &                                 COMIN_ZAXIS_3D, COMIN_ZAXIS_2D,                                       &
     &                                 COMIN_VAR_DATATYPE_DOUBLE, COMIN_VAR_DATATYPE_FLOAT,                  &
     &                                 comin_var_request_add, comin_metadata_set
+  USE p3plugin_global_vars,    ONLY : rank_world, comm_world
 
   IMPLICIT NONE
   PRIVATE
 
   PUBLIC :: print_global_max, create_var, create_tracer
+  PUBLIC :: uppercase, lowercase
 
   INTEGER, PARAMETER :: wp = SELECTED_REAL_KIND(12,307)
 
@@ -22,7 +23,7 @@ CONTAINS
     REAL(wp), POINTER, INTENT(IN) :: var_3dptr(:,:,:)
     REAL, INTENT(IN), OPTIONAL    :: factor
     REAL                          :: local_max, global_max
-    INTEGER                       :: comm, root, rank, ierr
+    INTEGER                       :: root, ierr
 
     IF (PRESENT(factor)) THEN
       local_max = maxval(var_3dptr * factor)
@@ -31,13 +32,10 @@ CONTAINS
     END IF
 
     root = 0
-    comm = comin_parallel_get_plugin_mpi_comm()
-    rank = comin_parallel_get_host_mpi_rank()
-
-    CALL MPI_REDUCE(local_max, global_max, 1, MPI_REAL, MPI_MAX, root, comm, ierr)
+    CALL MPI_Reduce(local_max, global_max, 1, MPI_REAL, MPI_MAX, root, comm_world, ierr)
     IF (ierr /= 0) CALL comin_plugin_finish('print_global_max (p3plugin)', 'failed!')
 
-    IF (rank == root) WRITE(0,*) 'global_max(' // var_name // ')', global_max
+    IF (rank_world == root) WRITE(0,*) 'global_max(' // var_name // ')', global_max
   END SUBROUTINE print_global_max
 
 
@@ -115,5 +113,39 @@ CONTAINS
       CALL comin_metadata_set(descriptor, "units", TRIM(units))
     END IF
   END SUBROUTINE comin_var_request_add_wrapper
+
+  FUNCTION uppercase(word_in) RESULT(word_out)
+    CHARACTER(len=*), INTENT(IN) :: word_in
+    CHARACTER(:), ALLOCATABLE    :: word_out
+    CHARACTER(len=1)   :: c
+    INTEGER            :: i
+
+    ALLOCATE(CHARACTER(len_trim(word_in)) :: word_out)
+    DO i = 1, len_trim(word_in)
+      c = word_in(i:i)
+      IF (c >= 'a' .and. c <= 'z') THEN
+        word_out(i:i) = char(ichar(c) - 32)
+      ELSE
+        word_out(i:i) = c
+      END IF
+    END DO
+  END FUNCTION uppercase
+
+  FUNCTION lowercase(word_in) RESULT(word_out)
+    CHARACTER(len=*), INTENT(IN) :: word_in
+    CHARACTER(:), ALLOCATABLE    :: word_out
+    CHARACTER(len=1)   :: c
+    INTEGER            :: i
+
+    ALLOCATE(CHARACTER(len_trim(word_in)) :: word_out)
+    DO i = 1, len_trim(word_in)
+      c = word_in(i:i)
+      IF (c >= 'A' .and. c <= 'Z') THEN
+        word_out(i:i) = char(ichar(c) + 32)
+      ELSE
+        word_out(i:i) = c
+      END IF
+    END DO
+  END FUNCTION lowercase
 
 END MODULE p3plugin_utils

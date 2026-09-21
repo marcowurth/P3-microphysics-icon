@@ -1,11 +1,11 @@
 
 MODULE p3plugin_main_routines
-  USE comin_plugin_interface,  ONLY : comin_parallel_get_host_mpi_rank, comin_descrdata_get_cell_indices
+  USE comin_plugin_interface,  ONLY : comin_descrdata_get_cell_indices
 
-  USE p3plugin_types,          ONLY : t_dyn_vars_3dptr, t_mp_vars_3dptr, t_p3_vars_3dptr,                   &
+  USE p3plugin_types,          ONLY : t_dyn_vars_3dptr, t_mp_vars_3dptr, t_p3_vars_3dptr,                      &
     &                                 t_icon_tracer_3dptr, t_p3_tracer_3dptr
-  USE p3plugin_global_vars,    ONLY : fastphystep, n_icecat, l3mom_ice, lliqfrac, dtime, p_global, p_patch, &
-    &                                 dyn_vars, mp_vars, p3_vars, icon_tracer, p3_tracer
+  USE p3plugin_global_vars,    ONLY : rank_world, fastphystep, n_icecat, l3mom_ice, lliqfrac, dtime, p_global, &
+    &                                 p_patch, dyn_vars, mp_vars, p3_vars, icon_tracer, p3_tracer
   USE p3plugin_utils,          ONLY : print_global_max
 
   USE microphy_p3,             ONLY : p3_main
@@ -24,7 +24,7 @@ CONTAINS
   ! --------------------------------------------------------------------
   SUBROUTINE p3_main_wrapper()  BIND(C)
 
-    INTEGER :: rank, i_icecat, jg, jk, jb
+    INTEGER :: i_icecat, jg, jk, jb
     INTEGER :: i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end
     INTEGER :: n_diag_2d, n_diag_3d
 
@@ -83,11 +83,10 @@ CONTAINS
     CHARACTER(len=16) :: model = 'ICON'
     CHARACTER(len=20) :: timer_description(20)
 
-    rank = comin_parallel_get_host_mpi_rank()
-    IF (rank == 0) WRITE (0,*) 'run P3 microphysics'
-    !IF (rank == 0) WRITE (0,'(a,i)') ' fastphystep', fastphystep
-    !IF (rank == 0) WRITE (0,'(a,i)') ' ncells', p_patch%cells%ncells
-    !IF (rank == 0) WRITE (0,'(a,i)') ' ncells_global', p_patch%cells%ncells_global
+    IF (rank_world == 0) WRITE (0,*) 'run P3 microphysics'
+    !IF (rank_world == 0) WRITE (0,'(a,i)') ' fastphystep', fastphystep
+    !IF (rank_world == 0) WRITE (0,'(a,i)') ' ncells', p_patch%cells%ncells
+    !IF (rank_world == 0) WRITE (0,'(a,i)') ' ncells_global', p_patch%cells%ncells_global
 
 
     CALL dyn_vars%dz%to_3d(dyn_vars_3d%dz)
@@ -214,13 +213,13 @@ CONTAINS
     i_startblk = p_patch%cells%start_block(rl_start)
     i_endblk   = p_patch%cells%end_block(rl_end)
 
-    !IF (rank == 0) WRITE (0,*) 'i_startblk, i_endblk:', i_startblk, i_endblk
+    !IF (rank_world == 0) WRITE (0,*) 'i_startblk, i_endblk:', i_startblk, i_endblk
 
 !!$OMP PARALLEL PRIVATE(jb,i_startidx,i_endidx) NUM_THREADS(1)
 !!$OMP DO SCHEDULE(DYNAMIC, 1)
 
     DO jb = i_startblk, i_endblk
-      !IF (rank == 0) WRITE (0,*) 'in do loop, jb=', jb
+      !IF (rank_world == 0) WRITE (0,*) 'in do loop, jb=', jb
       CALL comin_descrdata_get_cell_indices(jg, jb, i_startblk, i_endblk, i_startidx, i_endidx, rl_start, rl_end)
 
       CALL p3_main(qc             = qc_3d(i_startidx:i_endidx, 1:p_patch%nlev, jb),                       &
@@ -280,7 +279,7 @@ CONTAINS
 !!$OMP END DO
 !!$OMP END PARALLEL
 
-    !IF (rank == 0) WRITE (0,*) 'after do loop'
+    !IF (rank_world == 0) WRITE (0,*) 'after do loop'
 
     ! update P3 vars and tracers
     icon_tracer_3d%qi = sum(qitot_4d, dim=4)
@@ -344,9 +343,9 @@ CONTAINS
     mp_vars_3d%prec_gsp_d(:,:,1) = mp_vars_3d%prec_gsp_d(:,:,1) + (prt_liq_2d + prt_sol_2d) * 1000.
     mp_vars_3d%rain_gsp(:,:,1) = mp_vars_3d%rain_gsp(:,:,1) + prt_liq_2d * 1000.
     mp_vars_3d%snow_gsp(:,:,1) = mp_vars_3d%snow_gsp(:,:,1) + prt_sol_2d * 1000.
-    !IF (rank == 0) WRITE (0,*) 'shape(prt_sol_2d)', shape(prt_sol_2d)
+    !IF (rank_world == 0) WRITE (0,*) 'shape(prt_sol_2d)', shape(prt_sol_2d)
 
-    ! IF (rank == 0) THEN
+    ! IF (rank_world == 0) THEN
     !   CALL print_global_max('w', dyn_vars_3d%w_hl)
     !   CALL print_global_max('qv', icon_tracer_3d%qv)
     !   CALL print_global_max('qc', icon_tracer_3d%qc)
@@ -380,7 +379,7 @@ CONTAINS
       CALL p3_tracer_3d(i_icecat)%nullify()
     END DO
 
-    !IF (rank == 0) WRITE (0,*) 'end of p3_main_wrapper'
+    !IF (rank_world == 0) WRITE (0,*) 'end of p3_main_wrapper'
 
   END SUBROUTINE p3_main_wrapper
 
@@ -389,11 +388,9 @@ CONTAINS
   ! Set reff before the rad call to values from P3
   ! --------------------------------------------------------------------
   SUBROUTINE set_reff_before_rad()  BIND(C)
-    INTEGER               :: rank
     TYPE(t_mp_vars_3dptr) :: mp_vars_3d
 
-    rank = comin_parallel_get_host_mpi_rank()
-    IF (rank == 0) WRITE (0,*) 'set reff_qc, reff_qi to P3 values'
+    IF (rank_world == 0) WRITE (0,*) 'set reff_qc, reff_qi to P3 values'
 
     CALL mp_vars%reff_qc%to_3d(mp_vars_3d%reff_qc)
     CALL mp_vars%deff_c%to_3d(mp_vars_3d%deff_c)
