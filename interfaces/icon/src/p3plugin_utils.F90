@@ -1,6 +1,9 @@
 
 MODULE p3plugin_utils
-  USE mpi,                     ONLY : MPI_Reduce, MPI_REAL, MPI_MAX
+!! JM_20260922 >> gave me an error while building with easybuild on HoreKa2
+  ! USE mpi,                     ONLY : MPI_Reduce, MPI_REAL, MPI_MAX
+  USE mpi
+!! << JM_20260922
 
   USE comin_plugin_interface,  ONLY : comin_plugin_finish, t_comin_var_descriptor,                          &
     &                                 COMIN_ZAXIS_3D, COMIN_ZAXIS_2D,                                       &

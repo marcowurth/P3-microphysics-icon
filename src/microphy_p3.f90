@@ -3473,101 +3473,99 @@ call cpu_time(timer_start(3))
                                 (qsat0-Qv_cld(i,k))*2.*pi/xlf(i,k)))*nitot(i,k,iice)
                   qifrz(iice) = min(max(qifrz(iice),0.),qiliq(i,k,iice)*i_dt)
 !! JM_20260619 << adding how many rain drops refreeze. Assumption: the number of mixed-phase ice particles that freeze
-!				  is given by the fraction of qifrz / qiliq x total mixed-phase particles (nitot)
+!				      is given by the fraction of qifrz / qiliq x total mixed-phase particles (nitot)
                   nifrz(iice) = qifrz(iice)/qiliq(i,k,iice)*nitot(i,k,iice)
 !! << JM_20260619
-
+                  qifrz_present: if (qifrz(iice) .ge. qsmall) then
 !! JM_20260427 >> adding Sullivan FFD parameterization
-                  ! !--- SULLIVAN FFD parameterization ---!
-				  ! if (nCat>1) then
-                  !    !determine destination ice-phase category
-                  !    D_new = 10.e-6 !assumes ice crystals from FFD are tiny
-                  !    call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest_ffd)
-                  !    if (global_status /= STATUS_OK) return
-                  ! else
-                  !    iice_dest_ffd = 1
-                  ! endif
-                  !
-                  ! p_DS = p_max * EXP(-((t(i,k) - norm_temp)/(2.0**0.5*norm_sigma))**2.0)
-                  ! N_DS = MAX(p_DS * eta_DS, 0.0)
-                  ! dum1 = MAX(nifrz(iice) * N_DS, 0.0)
-                  ! dum2 = dum1 * piov6 * 900. * D_new**3
-                  ! qifrz(iice) = qifrz(iice) - dum2
-                  ! if (qifrz(iice) .lt. 0.0) then
-                  !    dum2 = qifrz(iice) + dum2
-                  !    qifrz(iice) = 0.0
-                  !    nifrz(iice) = 0.0
-                  ! endif
-                  ! qimul_ffd_frz(iice_dest_ffd) = qimul_ffd_frz(iice_dest_ffd) + dum2
-                  ! nimul_ffd_frz(iice_dest_ffd) = nimul_ffd_frz(iice_dest_ffd) + dum1
-                  ! !--- SULLIVAN FFD parameterization ---!
+                     !--- SULLIVAN FFD parameterization ---!
+                     if (nCat>1) then
+                        !determine destination ice-phase category
+                        D_new = 10.e-6 !assumes ice crystals from FFD are tiny
+                        call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest_ffd)
+                        if (global_status /= STATUS_OK) return
+                     else
+                        iice_dest_ffd = 1
+                     endif
+                     
+                     p_DS = p_max * EXP(-((t(i,k) - norm_temp)/(2.0**0.5*norm_sigma))**2.0)
+                     N_DS = MAX(p_DS * eta_DS, 0.0)
+                     dum1 = MAX(nifrz(iice) * N_DS, 0.0)
+                     dum2 = dum1 * piov6 * 900. * D_new**3
+                     qifrz(iice) = qifrz(iice) - dum2
+                     if (qifrz(iice) .lt. 0.0) then
+                        dum2 = qifrz(iice) + dum2
+                        qifrz(iice) = 0.0
+                        nifrz(iice) = 0.0
+                     endif
+                     qimul_ffd_frz(iice_dest_ffd) = qimul_ffd_frz(iice_dest_ffd) + dum2
+                     nimul_ffd_frz(iice_dest_ffd) = nimul_ffd_frz(iice_dest_ffd) + dum1
+                     !--- SULLIVAN FFD parameterization ---!
 !! << JM_20260427
 !! JM_20260602 >> adding Phillips FFD parameterisation
-                  ! !--- PHILLIPS FFD parameterization ---!
+                     !--- PHILLIPS FFD parameterization ---!
+                     !-- calculate mean rain drop diameter (based on rain DSD)
+                     !-- Assumption: the liquid water on a mixed-phase particle that freezes is the same as the mass of pure 
+                     !   rain drops that would freeze.
+                     !-- Assumption: qifrz and nifrz are, respectively, the actual mass and number of rain drops that freeze
+                     call get_rain_dsd2(qifrz(iice),nifrz(iice),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+                     d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
+                     ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
 
-                  ! !-- calculate mean rain drop diameter (based on rain DSD)
-                  ! !-- We assume that the liquid water on a mixed-phase particle that freezes is the same as the mass of pure 
-                  ! !   rain drops that would freeze.
-                  ! qifrz_present: if (qifrz(iice) .ge. qsmall) then
-                  !    !-- Assumption: qifrz and nifrz are the actual mass and number of rain drops that freeze, respectively
-                  !    call get_rain_dsd2(qifrz(iice),nifrz(iice),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
-                  !    d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
-                  !    ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
+                     !-- calculate mean rain drop mass (before freezing)
+                     m_rain = piov6 * 1000 * d_rain**3 ! mass of mean rain drop for FFD, assuming density of 1000 kg/m3
 
-                  !    !-- calculate mean rain drop mass (before freezing)
-                  !    m_rain = piov6 * 1000 * d_rain**3 ! mass of mean rain drop for FFD, assuming density of 1000 kg/m3
-
-                  !    !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
-                  !    !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
-                  !    call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
+                     !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
+                     !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
+                     call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
                      
-                  !    !-- number of fragments from FFD 
-                  !    dum1_small = ns_frag * nifrz(iice)                     ! total number of small fragments from FFD
-                  !    dum1_big   = nb_frag * nifrz(iice)                     ! total number of big fragments from FFD
+                     !-- number of fragments from FFD 
+                     dum1_small = ns_frag * nifrz(iice)  ! total number of small fragments from FFD
+                     dum1_big   = nb_frag * nifrz(iice)  ! total number of big fragments from FFD
          
-                  !    !-- mass of fragments from FFD
-                  !    dum2_small = dum1_small * piov6 * 900 * D_new**3 ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
-                  !    dum2_big   = dum1_big * 1./2.5 * m_rain          ! assumes big fragments have mass equal to 1/2.5 of the mean rain drop mass
+                     !-- mass of fragments from FFD
+                     dum2_small = dum1_small * piov6 * 900 * D_new**3 ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
+                     dum2_big   = dum1_big * 1./2.5 * m_rain          ! assumes big fragments have mass equal to 1/2.5 of the mean rain drop mass
 
-                  !    !-- small fragments from FFD
-                  !    if (nCat>1) then
-                  !       !determine destination ice-phase category
-                  !       D_small = 10.e-6 ! assumes ice crystals from FFD are tiny
-                  !       call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
-                  !       if (global_status /= STATUS_OK) return
-                  !    else
-                  !       iice_dest_ffd = 1
-                  !    endif
+                     !-- small fragments from FFD
+                     if (nCat>1) then
+                        !determine destination ice-phase category
+                        D_small = 10.e-6 ! assumes ice crystals from FFD are tiny
+                        call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
+                        if (global_status /= STATUS_OK) return
+                     else
+                        iice_dest_ffd = 1
+                     endif
                      
-                  !    qifrz(iice) = qifrz(iice) - dum2_small
-                  !    if (qifrz(iice) .lt. 0.0 ) then
-                  !       dum2_small = qifrz(iice) + dum2_small
-                  !       qifrz(iice) = 0.0
-                  !       nifrz(iice) = 0.0
-                  !    endif
-                  !    qimul_ffd_frz(iice_dest_ffd) = qimul_ffd_frz(iice_dest_ffd) + dum2_small
-                  !    nimul_ffd_frz(iice_dest_ffd) = nimul_ffd_frz(iice_dest_ffd) + dum1_small
+                     qifrz(iice) = qifrz(iice) - dum2_small
+                     if (qifrz(iice) .lt. 0.0 ) then
+                        dum2_small = qifrz(iice) + dum2_small
+                        qifrz(iice) = 0.0
+                        nifrz(iice) = 0.0
+                     endif
+                     qimul_ffd_frz(iice_dest_ffd) = qimul_ffd_frz(iice_dest_ffd) + dum2_small
+                     nimul_ffd_frz(iice_dest_ffd) = nimul_ffd_frz(iice_dest_ffd) + dum1_small
 
-                  !    !-- big fragments from FFD
-                  !    if (nCat>1) then
-                  !       !determine destination ice-phase category
-                  !       D_big = (( (1./2.5*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2.5*m_rain
-                  !       call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
-                  !       if (global_status /= STATUS_OK) return
-                  !    else
-                  !       iice_dest_ffd = 1
-                  !    endif
+                     !-- big fragments from FFD
+                     if (nCat>1) then
+                        !determine destination ice-phase category
+                        D_big = (( (1./2.5*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2.5*m_rain
+                        call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
+                        if (global_status /= STATUS_OK) return
+                     else
+                        iice_dest_ffd = 1
+                     endif
 
-                  !    qifrz(iice) = qifrz(iice) - dum2_big
-                  !    if (qifrz(iice) .lt. 0.0 ) then
-                  !       dum2_big = qifrz(iice) + dum2_big
-                  !       qifrz(iice) = 0.0
-                  !       nifrz(iice) = 0.0
-                  !    endif
-                  !    qimul_ffd_frz(iice_dest_ffd) = qimul_ffd_frz(iice_dest_ffd) + dum2_big
-                  !    nimul_ffd_frz(iice_dest_ffd) = nimul_ffd_frz(iice_dest_ffd) + dum1_big
-                  ! endif qifrz_present
-                  ! !--- PHILLIPS FFD parameterization ---!
+                     qifrz(iice) = qifrz(iice) - dum2_big
+                     if (qifrz(iice) .lt. 0.0 ) then
+                        dum2_big = qifrz(iice) + dum2_big
+                        qifrz(iice) = 0.0
+                        nifrz(iice) = 0.0
+                     endif
+                     qimul_ffd_frz(iice_dest_ffd) = qimul_ffd_frz(iice_dest_ffd) + dum2_big
+                     nimul_ffd_frz(iice_dest_ffd) = nimul_ffd_frz(iice_dest_ffd) + dum1_big
+                  endif qifrz_present
+                  !--- PHILLIPS FFD parameterization ---!
 !! << JM_20260602
                 endif
              ! Shedding
@@ -3757,94 +3755,95 @@ call cpu_time(timer_start(3))
              qrheti(iice_dest) = Q_nuc
              nrheti(iice_dest) = N_nuc
 
+             qnuc_present: if (Q_nuc .ge. qsmall) then
 !! JM_20260427 >> adding Sullivan FFD parameterization
-            ! !--- SULLIVAN FFD parameterization ---!
-            !  if (nCat>1) then
-            !     !determine destination ice-phase category
-            !     D_new = 10.e-6 !assumes ice crystals from FFD are tiny
-            !     call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest_ffd)
-            !     if (global_status /= STATUS_OK) return
-            !  else
-            !     iice_dest_ffd = 1
-            !  endif
+                !--- SULLIVAN FFD parameterization ---!
+                if (nCat>1) then
+                   !determine destination ice-phase category
+                   D_new = 10.e-6 !assumes ice crystals from FFD are tiny
+                   call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_new,deltaD_init,iice_dest_ffd)
+                   if (global_status /= STATUS_OK) return
+                else
+                   iice_dest_ffd = 1
+                endif
 
-            !  p_DS = p_max * EXP(-((t(i,k) - norm_temp)/(2.0**0.5*norm_sigma))**2.0)
-            !  N_DS = MAX(p_DS * eta_DS, 0.0)
-            !  dum1 = MAX(N_nuc * N_DS, 0.0)
-            !  dum2 = dum1 * piov6 * 900. * D_new**3 ! mass of new ice from FFD
-            !  qrheti(iice_dest) = qrheti(iice_dest) - dum2
-            !  if (qrheti(iice_dest) .lt. 0.0 ) then
-            !    dum2 = qrheti(iice_dest) + dum2
-            !    qrheti(iice_dest) = 0.0
-            !    nrheti(iice_dest) = 0.0
-            !  endif
-            !  qimul_ffd_imm(iice_dest_ffd) = qimul_ffd_imm(iice_dest_ffd) + dum2
-            !  nimul_ffd_imm(iice_dest_ffd) = nimul_ffd_imm(iice_dest_ffd) + dum1
-            ! !--- SULLIVAN FFD parameterization ---!
+                p_DS = p_max * EXP(-((t(i,k) - norm_temp)/(2.0**0.5*norm_sigma))**2.0)
+                N_DS = MAX(p_DS * eta_DS, 0.0)
+                dum1 = MAX(N_nuc * N_DS, 0.0)
+                dum2 = dum1 * piov6 * 900. * D_new**3 ! mass of new ice from FFD
+                qrheti(iice_dest) = qrheti(iice_dest) - dum2
+                if (qrheti(iice_dest) .lt. 0.0 ) then
+                  dum2 = qrheti(iice_dest) + dum2
+                  qrheti(iice_dest) = 0.0
+                  nrheti(iice_dest) = 0.0
+                endif
+                qimul_ffd_imm(iice_dest_ffd) = qimul_ffd_imm(iice_dest_ffd) + dum2
+                nimul_ffd_imm(iice_dest_ffd) = nimul_ffd_imm(iice_dest_ffd) + dum1
+                !--- SULLIVAN FFD parameterization ---!
 !! << JM_20260427
 
 !! JM_20260602 >> adding Phillips FFD parameterisation
-            ! !--- PHILLIPS FFD parameterization ---!
+                !--- PHILLIPS FFD parameterization ---!
+                !-- calculate mean rain drop diameter (based on rain DSD)
+                !   Assumption: Q_nuc and N_nuc are the actual mass and number of rain drops that freeze, respectively
+                call get_rain_dsd2(Q_nuc,N_nuc,mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+                d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
+                ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
 
-            ! !-- calculate mean rain drop diameter (based on rain DSD)
-		    ! !   Assumption: Q_nuc and N_nuc are the actual mass and number of rain drops that freeze, respectively
-            !  call get_rain_dsd2(Q_nuc,N_nuc,mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
-            !  d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
-            !  ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
+                !-- calculate mean rain drop mass
+                m_rain = piov6 * 1000 * d_rain**3 ! mass of mean rain drop for FFD, assuming density of 1000 kg/m3
 
-            !  !-- calculate mean rain drop mass
-            !  m_rain = piov6 * 1000 * d_rain**3 ! mass of mean rain drop for FFD, assuming density of 1000 kg/m3
+                !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
+                !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
+                call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
 
-            ! !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
-            ! !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
-            !  call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
+                !-- number of fragments from FFD 
+                dum1_small = ns_frag * N_nuc                     ! total number of small fragments from FFD
+                dum1_big   = nb_frag * N_nuc                     ! total number of big fragments from FFD
+   
+                !-- mass of fragments from FFD
+                dum2_small = dum1_small * piov6 * 900 * D_new**3 ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
+                dum2_big   = dum1_big * 1./2.5 * m_rain          ! assumes big fragments have mass equal to 1/2.5 of the mean rain drop mass
 
-            !  !-- number of fragments from FFD 
-            !  dum1_small = ns_frag * N_nuc                     ! total number of small fragments from FFD
-            !  dum1_big   = nb_frag * N_nuc                     ! total number of big fragments from FFD
+                !-- small fragments from FFD
+                if (nCat>1) then
+                   !determine destination ice-phase category
+                   D_small = 10.e-6 ! assumes ice crystals from FFD are tiny
+                   call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
+                   if (global_status /= STATUS_OK) return
+                else
+                   iice_dest_ffd = 1
+                endif
+
+                qrheti(iice_dest) = qrheti(iice_dest) - dum2_small
+                if (qrheti(iice_dest) .lt. 0.0 ) then
+                   dum2_small = qrheti(iice_dest) + dum2_small
+                   qrheti(iice_dest) = 0.0
+                   nrheti(iice_dest) = 0.0
+                endif
+                qimul_ffd_imm(iice_dest_ffd) = qimul_ffd_imm(iice_dest_ffd) + dum2_small
+                nimul_ffd_imm(iice_dest_ffd) = nimul_ffd_imm(iice_dest_ffd) + dum1_small
  
-            !  !-- mass of fragments from FFD
-            !  dum2_small = dum1_small * piov6 * 900 * D_new**3 ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
-            !  dum2_big   = dum1_big * 1./2.5 * m_rain          ! assumes big fragments have mass equal to 1/2.5 of the mean rain drop mass
+                !-- big fragments from FFD
+                if (nCat>1) then
+                   !determine destination ice-phase category
+                   D_big = (( (1./2.5*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2.5*m_rain
+                   call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
+                   if (global_status /= STATUS_OK) return
+                else
+                   iice_dest_ffd = 1
+                endif
 
-            !  !-- small fragments from FFD
-            !  if (nCat>1) then
-            !     !determine destination ice-phase category
-            !     D_small = 10.e-6 ! assumes ice crystals from FFD are tiny
-            !     call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
-            !     if (global_status /= STATUS_OK) return
-            !  else
-            !     iice_dest_ffd = 1
-            !  endif
-
-            !  qrheti(iice_dest) = qrheti(iice_dest) - dum2_small
-            !  if (qrheti(iice_dest) .lt. 0.0 ) then
-            !    dum2_small = qrheti(iice_dest) + dum2_small
-            !    qrheti(iice_dest) = 0.0
-            !    nrheti(iice_dest) = 0.0
-            !  endif
-            !  qimul_ffd_imm(iice_dest_ffd) = qimul_ffd_imm(iice_dest_ffd) + dum2_small
-            !  nimul_ffd_imm(iice_dest_ffd) = nimul_ffd_imm(iice_dest_ffd) + dum1_small
-
-            !  !-- big fragments from FFD
-            !  if (nCat>1) then
-            !     !determine destination ice-phase category
-            !     D_big = (( (1./2.5*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2.5*m_rain
-            !     call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
-            !     if (global_status /= STATUS_OK) return
-            !  else
-            !     iice_dest_ffd = 1
-            !  endif
-
-            !  qrheti(iice_dest) = qrheti(iice_dest) - dum2_big
-            !  if (qrheti(iice_dest) .lt. 0.0 ) then
-            !    dum2_big = qrheti(iice_dest) + dum2_big
-            !    qrheti(iice_dest) = 0.0
-            !    nrheti(iice_dest) = 0.0
-            !  endif
-            !  qimul_ffd_imm(iice_dest_ffd) = qimul_ffd_imm(iice_dest_ffd) + dum2_big
-            !  nimul_ffd_imm(iice_dest_ffd) = nimul_ffd_imm(iice_dest_ffd) + dum1_big
-            !  !--- PHILLIPS FFD parameterization ---!
+                qrheti(iice_dest) = qrheti(iice_dest) - dum2_big
+                if (qrheti(iice_dest) .lt. 0.0 ) then
+                   dum2_big = qrheti(iice_dest) + dum2_big
+                   qrheti(iice_dest) = 0.0
+                   nrheti(iice_dest) = 0.0
+                endif
+                qimul_ffd_imm(iice_dest_ffd) = qimul_ffd_imm(iice_dest_ffd) + dum2_big
+                nimul_ffd_imm(iice_dest_ffd) = nimul_ffd_imm(iice_dest_ffd) + dum1_big
+             endif qnuc_present
+             !--- PHILLIPS FFD parameterization ---!
 !! << JM_20260602
           endif
 
@@ -3987,143 +3986,141 @@ call cpu_time(timer_start(3))
          !     endif calc_FFD_Qu
          ! enddo iice_loop_FFD_Qu
 
-         ! !--- Phillips FFD parameterization ---!
-         ! qr_present: if (qrcol(iice).gt.qsmall) then
-         !    !-- calculate mean rain drop diameter (based on rain DSD)
-		 !    !   Assumption: qrcol and nrcol are the actual mass and number of rain drops that freezes, respectively
-         !    call get_rain_dsd2(qrcol(iice),nrcol(iice),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
-         !    d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
-         !    ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
+         !--- Phillips FFD parameterization ---!
+         qrcol_present: if (qrcol(iice).gt. 0) then
+            !-- calculate mean rain drop diameter (based on rain DSD)
+		      !   Assumption: qrcol and nrcol are the actual mass and number of rain drops that freezes, respectively
+            call get_rain_dsd2(qrcol(iice),nrcol(iice),mu_r(i,k),lamr(i,k),tmp1,tmp2,iSPF(i,k))
+            d_rain = (mu_r(i,k) + 1.) / lamr(i,k)                                     !-- number-weighted mean diameter of rain drops
+            ! d_rain = ((mu_r(i,k)+3)*(mu_r(i,k)+2)*(mu_r(i,k)+1))**(1./3.)/lamr(i,k) !-- volume-weighted mean diameter of rain drops
 
-         !    !-- calculate mean rain drop mass
-         !    m_rain = piov6 * 1000 * d_rain**3   ! rhow = 1000 kg/m3
+            !-- calculate mean rain drop mass
+            m_rain = piov6 * 1000 * d_rain**3 ! mass of mean rain drop for FFD, assuming density of 1000 kg/m3
 
-         !    !-- calculate mean rain drop fallspeed
-         !    call get_rain_fallspeed(qrcol(iice),nrcol(iice),iSPF(i,k),rhofacr(i,k),v_qrain)
+            !-- calculate mean rain drop fallspeed
+            call get_rain_fallspeed(qrcol(iice),nrcol(iice),iSPF(i,k),rhofacr(i,k),v_qrain)
 
-         !    iice_loop_FFD_Phil:  do iice = 1,nCat
-         !       calc_FFD_Phil:  if  ((qitot(i,k,iice).ge.qsmall) .and. (qirim(i,k,iice).ge.qsmall) &
-         !                            .and. (t(i,k).gt.235.15) .and. (t(i,k).lt.273.15) &
-         !                            .and. (diam_ice(i,k,iice).lt.1000.e-6)) then
+            iice_loop_FFD_Phil:  do iice = 1,nCat
+               calc_FFD_Phil:  if  ((qitot(i,k,iice).ge.qsmall) .and. (qirim(i,k,iice).ge.qsmall) &
+                                    .and. (t(i,k).gt.248.15) .and. (t(i,k).lt.270.15) &
+                                    .and. (diam_ice(i,k,iice).lt.1000.e-6)) then ! no d_rain .gt. 50.e-6 check here as this is already done in delN_drop_freeze_mode1/2
 
-         !          !-- calculate mean mass of ice
-         !          m_ice = qitot(i,k,iice)/(nitot(i,k,iice)+1e-20)
+                  !-- calculate mean mass of ice
+                  m_ice = qitot(i,k,iice)/(nitot(i,k,iice)+1e-20)
 
-         !          ffd_mode1and2: if (m_rain .gt. m_ice) then
-         !             ! Mode 1:
-		 ! 		       !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
-         !    		   !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
-         !             call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
+                  ffd_mode1and2: if (m_rain .gt. m_ice) then
+                     ! Mode 1:
+		   		      !-- I did not put any droplet diameter threshold here for Phillips FFD because the DelN_drop_freeze_mode1
+            	      !   has already a threshold and sets ns_frag and nb_frag to zero if d_drop < 50 microns
+                     call delN_drop_freeze_mode1(t(i,k), d_rain, ns_frag, nb_frag)
 
-         !             !-- small fragments from FFD
-         !             if (nCat>1) then
-         !                !determine destination ice-phase category
-         !                D_small = 10.e-6 ! assumes ice crystals from FFD are tiny
-         !                call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
-         !                if (global_status /= STATUS_OK) return
-         !             else
-         !                iice_dest_ffd = 1
-         !             endif
+                     !-- small fragments from FFD
+                     if (nCat>1) then
+                        !determine destination ice-phase category
+                        D_small = 10.e-6 ! assumes ice crystals from FFD are tiny
+                        call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
+                        if (global_status /= STATUS_OK) return
+                     else
+                        iice_dest_ffd = 1
+                     endif
                      
-         !             !-- number and mass of small fragments from FFD
-         !             dum1_small = E_freeze * nrcol(iice) * ns_frag        ! total number of small fragments from FFD
-         !             dum2_small = dum1_small * piov6 * 900 * D_small**3   ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
+                     !-- number and mass of small fragments from FFD
+                     dum1_small = E_freeze * nrcol(iice) * ns_frag        ! total number of small fragments from FFD
+                     dum2_small = dum1_small * piov6 * 900 * D_small**3   ! rhoice=916.7 is used in SB and 920 in Phillips paper, but for consistency with P3 we use 900 kg/m3 here
                      
-         !             qrcol(iice) = qrcol(iice) - dum2_small
-         !             if (qrcol(iice) .lt. 0.0 ) then
-         !                dum2_small = qrcol(iice) + dum2_small
-         !                qrcol(iice) = 0.0
-         !                nrcol(iice) = 0.0
-         !             endif
-         !             qimul_ffd_rim(iice_dest_ffd) = qimul_ffd_rim(iice_dest_ffd) + dum2_small
-         !             nimul_ffd_rim(iice_dest_ffd) = nimul_ffd_rim(iice_dest_ffd) + dum1_small
+                     qrcol(iice) = qrcol(iice) - dum2_small
+                     if (qrcol(iice) .lt. 0.0 ) then
+                        dum2_small = qrcol(iice) + dum2_small
+                        qrcol(iice) = 0.0
+                        nrcol(iice) = 0.0
+                     endif
+                     qimul_ffd_rim(iice_dest_ffd) = qimul_ffd_rim(iice_dest_ffd) + dum2_small
+                     nimul_ffd_rim(iice_dest_ffd) = nimul_ffd_rim(iice_dest_ffd) + dum1_small
 
-         !             !-- big fragments from FFD
-         !             if (nCat>1) then
-         !                !determine destination ice-phase category
-         !                D_big = (( (1./2.5*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2.5*m_rain
-         !                call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
-         !                if (global_status /= STATUS_OK) return
-         !             else
-         !                iice_dest_ffd = 1
-         !             endif
+                     !-- big fragments from FFD
+                     if (nCat>1) then
+                        !determine destination ice-phase category
+                        D_big = (( (1./2.5*m_rain)*6.)/(900*pi))**thrd ! assumes big fragments have diameter equal to droplets with mass 1/2.5*m_rain
+                        call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_big,deltaD_init,iice_dest_ffd)
+                        if (global_status /= STATUS_OK) return
+                     else
+                        iice_dest_ffd = 1
+                     endif
 
-         !             !-- number and mass of big fragments from FFD 
-         !             dum1_big   = E_freeze * nrcol(iice) * nb_frag    ! total number of big fragments from FFD
-         !             dum2_big   = dum1_big * 1./2.5 * m_rain          ! assumes big fragments have mass equal to 1/2.5 of the mean rain drop mass
+                     !-- number and mass of big fragments from FFD 
+                     dum1_big = E_freeze * nrcol(iice) * nb_frag    ! total number of big fragments from FFD
+                     dum2_big = dum1_big * 1./2.5 * m_rain          ! assumes big fragments have mass equal to 1/2.5 of the mean rain drop mass
 
-         !             qrcol(iice) = qrcol(iice) - dum2_big
-         !             if (qrcol(iice) .lt. 0.0 ) then
-         !                dum2_big = qrcol(iice) + dum2_big
-         !                qrcol(iice) = 0.0
-         !                nrcol(iice) = 0.0
-         !             endif
-         !             qimul_ffd_rim(iice_dest_ffd) = qimul_ffd_rim(iice_dest_ffd) + dum2_big
-         !             nimul_ffd_rim(iice_dest_ffd) = nimul_ffd_rim(iice_dest_ffd) + dum1_big
+                     qrcol(iice) = qrcol(iice) - dum2_big
+                     if (qrcol(iice) .lt. 0.0 ) then
+                        dum2_big = qrcol(iice) + dum2_big
+                        qrcol(iice) = 0.0
+                        nrcol(iice) = 0.0
+                     endif
+                     qimul_ffd_rim(iice_dest_ffd) = qimul_ffd_rim(iice_dest_ffd) + dum2_big
+                     nimul_ffd_rim(iice_dest_ffd) = nimul_ffd_rim(iice_dest_ffd) + dum1_big
 
-         !          elseif (m_rain .lt. m_ice) then
-         !             if (log_3momentIce .AND. log_LiquidFrac) then
-         !                call get_ice_fallspeed_TT(qitot(i,k,iice), qirim(i,k,iice), qiliq(i,k,iice), nitot(i,k,iice), birim(i,k,iice), zitot(i,k,iice), rhofaci(i,k), v_qice)
-         !             else if (.NOT.log_3momentIce .AND. log_LiquidFrac) then
-         !                call get_ice_fallspeed_FT(qitot(i,k,iice), qirim(i,k,iice), qiliq(i,k,iice), nitot(i,k,iice), birim(i,k,iice), rhofaci(i,k), v_qice)
-         !             else
-         !                stop "ERROR: define other fallspeed"
-         !             endif
+                  elseif (m_rain .lt. m_ice) then
+                     if (log_3momentIce .AND. log_LiquidFrac) then
+                        call get_ice_fallspeed_TT(qitot(i,k,iice), qirim(i,k,iice), qiliq(i,k,iice), nitot(i,k,iice), birim(i,k,iice), zitot(i,k,iice), rhofaci(i,k), v_qice)
+                     else if (.NOT.log_3momentIce .AND. log_LiquidFrac) then
+                        call get_ice_fallspeed_FT(qitot(i,k,iice), qirim(i,k,iice), qiliq(i,k,iice), nitot(i,k,iice), birim(i,k,iice), rhofaci(i,k), v_qice)
+                     else
+                        stop "ERROR: define other fallspeed"
+                     endif
                      
-         !             ! Mode 2:
-         !             ! Total number of splashes per event. One raindrop will release N_splashes
-		 ! 		       if (d_rain .gt. 150.e-6) then
-	     !                 N_splashes =  delN_drop_splash_mode2(t(i,k), d_rain, m_rain, m_ice, v_qrain, v_qice)
-		 ! 		       else
-         !                 N_splashes = 0
-         !             endif
+                     ! Mode 2:
+                     ! Total number of splashes per event. What happens:
+                     !     - One raindrop will release N_splashes
+                     !     - condition of d_rain > 150 microns from Eq. (7) of Phillips et al. (2018) is applied in delN_drop_splash_mode2
+                     N_splashes =  delN_drop_splash_mode2(t(i,k), d_rain, m_rain, m_ice, v_qrain, v_qice)
 
-         !             ! Number of ice and cloud liquid fragments of all collisions
-         !             !       - phi of all splashes will freeze into ice crysals
-         !             !       - (1-phi) of all splashes will be cloud liquid
-         !             dum1_ice = phi * N_splashes * nrcol(iice)
-         !             dum1_cld = (1.0 - phi) * N_splashes * nrcol(iice)
+                     ! Number of ice and cloud liquid fragments of all collisions
+                     !       - phi of all splashes will freeze into ice crysals
+                     !       - (1-phi) of all splashes will be cloud liquid
+                     dum1_ice = phi * N_splashes * nrcol(iice)
+                     dum1_cld = (1.0 - phi) * N_splashes * nrcol(iice)
                                     
-         !             ! Mass of all ice and cloud liquid fragments
-         !             !   - Phillips assumes 0.001*m_rain as ice particle mass
-         !             !   - the mass of cloud liquid is assumed to be the SB minimum mean value
-         !             dum2_ice = 0.001 * m_rain * dum1_ice
-         !             dum2_cld = qc_min * dum1_cld
+                     ! Mass of all ice and cloud liquid fragments
+                     !   - Phillips assumes 0.001*m_rain as ice particle mass
+                     !   - the mass of cloud liquid is assumed to be the SB minimum mean value
+                     dum2_ice = 0.001 * m_rain * dum1_ice
+                     dum2_cld = qc_min * dum1_cld
 
-         !             !-- small ice fragments from FFD
-         !             if (nCat>1) then
-         !                !determine destination ice-phase category
-         !                D_small = (( (0.001*m_rain)*6.)/(900*pi))**thrd ! assumes ice crystals from FFD are round and have 0.001*m_rain of the mass
-         !                call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
-         !                if (global_status /= STATUS_OK) return
-         !             else
-         !                iice_dest_ffd = 1
-         !             endif
+                     !-- small ice fragments from FFD
+                     if (nCat>1) then
+                        !determine destination ice-phase category
+                        D_small = (( (0.001*m_rain)*6.)/(900*pi))**thrd ! assumes ice crystals from FFD are round and have 0.001*m_rain of the mass
+                        call icecat_destination(qitot(i,k,:)*iSCF(i,k),diam_ice(i,k,:),D_small,deltaD_init,iice_dest_ffd)
+                        if (global_status /= STATUS_OK) return
+                     else
+                        iice_dest_ffd = 1
+                     endif
                      
-         !             qrcol(iice) = qrcol(iice) - dum2_ice
-         !             if (qrcol(iice) .lt. 0.0 ) then
-         !                dum2_ice = qrcol(iice) + dum2_ice
-         !                qrcol(iice) = 0.0
-         !                nrcol(iice) = 0.0
-         !             endif
-         !             qimul_ffd_rim(iice_dest_ffd) = qimul_ffd_rim(iice_dest_ffd) + dum2_ice
-         !             nimul_ffd_rim(iice_dest_ffd) = nimul_ffd_rim(iice_dest_ffd) + dum1_ice
+                     qrcol(iice) = qrcol(iice) - dum2_ice
+                     if (qrcol(iice) .lt. 0.0 ) then
+                        dum2_ice = qrcol(iice) + dum2_ice
+                        qrcol(iice) = 0.0
+                        nrcol(iice) = 0.0
+                     endif
+                     qimul_ffd_rim(iice_dest_ffd) = qimul_ffd_rim(iice_dest_ffd) + dum2_ice
+                     nimul_ffd_rim(iice_dest_ffd) = nimul_ffd_rim(iice_dest_ffd) + dum1_ice
 
-         !             !-- cloud droplets from FFD
-         !             qrcol(iice) = qrcol(iice) - dum2_cld
-         !             if (qrcol(iice) .lt. 0.0 ) then
-         !                dum2_cld = qrcol(iice) + dum2_cld
-         !                qrcol(iice) = 0.0
-         !                nrcol(iice) = 0.0
-         !             endif
-         !             qcmul_ffd_rim(iice) = qcmul_ffd_rim(iice) + dum2_cld
-         !             ncmul_ffd_rim(iice) = ncmul_ffd_rim(iice) + dum1_cld
+                     !-- cloud droplets from FFD
+                     qrcol(iice) = qrcol(iice) - dum2_cld
+                     if (qrcol(iice) .lt. 0.0 ) then
+                        dum2_cld = qrcol(iice) + dum2_cld
+                        qrcol(iice) = 0.0
+                        nrcol(iice) = 0.0
+                     endif
+                     qcmul_ffd_rim(iice) = qcmul_ffd_rim(iice) + dum2_cld
+                     ncmul_ffd_rim(iice) = ncmul_ffd_rim(iice) + dum1_cld
 
-         !             endif ffd_mode1and2
-         !       endif calc_FFD_Phil
-         !    enddo iice_loop_FFD_Phil
-         ! endif qr_present
-         ! !--- Phillips FFD parameterization ---!
+                     endif ffd_mode1and2
+               endif calc_FFD_Phil
+            enddo iice_loop_FFD_Phil
+         endif qrcol_present
+         !--- Phillips FFD parameterization ---!
 !! << JM_20260408
    !....................................................
    ! condensation/evaporation and deposition/sublimation
@@ -13714,7 +13711,7 @@ else
 
  !--------------------------------------------------------------------------
  ! Calculates the total number of splashes through collision of rain drop  -
- ! with bigger ice particles (m < mi)
+ ! with bigger ice particles (m_drop < m_ice)
  ! 
  ! Input parameters:
  !   - tempk:  ambient air temperature [K]
@@ -13730,35 +13727,39 @@ else
 
  implicit none
 
-! Arguments:
+ ! Arguments
  real, intent(in)  :: tempk, d_rain, m_rain, m_ice, v_rain, v_ice
 
-! Local variables and parameters:
+ ! Local variables and parameters
  real             :: tempc, frac_frozen, cke_k0, diml_energy, n_drop_splash
  real, parameter  :: c_water = 4200.0,    &  ! Specific heat capacity of liq. water [J/K/kg]
                      lh_freez = 3.3e5,    &  ! Specific latent heat of freezing [J/kg]
                      gamma_liq = 7.28e-2, &  ! Surface tension of liq. water [J/m2]
-                     pi = 3.1415,         &
+                     pi_local = 3.14159265, &
                      diml_energy_crit = 0.2  ! Critical dimensionless energy for onset of splashing on impact
 
-! Initialisation
+ ! Initialisation
  tempc=0.0; frac_frozen = 0.0; cke_k0 = 0.0; diml_energy = 0.0; n_drop_splash = 0.0; delN_drop_splash_mode2=0.0
 
-! Converting from K to °C
+ ! Converting from K to °C
  tempc = tempk-273.15
 
-! Fraction frozen at the end of stage 1 (Eq. f(T) on page 3039 before Eq. (6))
+ ! Fraction frozen at the end of stage 1 (Eq. f(T) on page 3039 before Eq. (6))
  frac_frozen = max(c_water*abs(tempc)/lh_freez, 0.0)
 
-! Collision kinetic energy (CKE) K0 before Eq. (6)
+ ! Collision kinetic energy (CKE) K0 before Eq. (6)
  cke_k0 = max(0.5 * (m_rain*m_ice/(m_rain+m_ice)) * (v_rain - v_ice)**2.0, 0.0)
 
-! Dimensionless energy as in Eq. (6)
- diml_energy = max(cke_k0/(pi*gamma_liq*(d_rain**2.0)), 0.0)
+ ! Dimensionless energy as in Eq. (6)
+ diml_energy = max(cke_k0/(pi_local*gamma_liq*(d_rain**2.0)), 0.0)
 
-! Number of total splashes per collisional event, i.e. Eq. (7)/phi(T)
- delN_drop_splash_mode2 = max(3.0 * (1.0 - frac_frozen) * max((diml_energy - diml_energy_crit), 0.0), 0.0)
- 
+ ! Number of total splashes per collisional event, i.e. Eq. (7)/phi(T); valid for D > 0.15mm = 150 microns
+ if (d_rain > 150.e-6) then
+   delN_drop_splash_mode2 = max(3.0 * (1.0 - frac_frozen) * max((diml_energy - diml_energy_crit), 0.0), 0.0)
+ else
+   delN_drop_splash_mode2 = 0.0
+ endif
+
  return
 
  end function delN_drop_splash_mode2

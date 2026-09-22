@@ -1,6 +1,9 @@
 
 MODULE p3plugin_tracer_init
-  USE mpi,                     ONLY : MPI_Wtime, MPI_Bcast, MPI_Scatter, MPI_INT, MPI_REAL, MPI_LOGICAL
+!! JM_20260922 >> gave me an error while building with easybuild on HoreKa2
+  !USE mpi,                     ONLY : MPI_Wtime, MPI_Bcast, MPI_Scatter, MPI_INT, MPI_REAL, MPI_LOGICAL
+  USE mpi
+!! << JM_20260922
 
   USE netcdf,                  ONLY : nf90_open, nf90_close, nf90_inq_dimid, nf90_inquire,                  &
     &                                 nf90_inq_varid, nf90_inquire_variable, nf90_inquire_dimension,        &

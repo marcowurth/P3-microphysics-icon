@@ -1,7 +1,11 @@
 
 MODULE p3plugin
-  USE mpi,                     ONLY : MPI_Comm_split_type, MPI_Comm_rank, MPI_Comm_size, MPI_INFO_NULL,   &
-    &                                 MPI_COMM_TYPE_SHARED, MPI_Allreduce, MPI_Allgather, MPI_INT, MPI_MAX
+
+!! JM_20260922 >> gave me an error while building with easybuild on HoreKa2
+  !USE mpi,                     ONLY : MPI_Comm_split_type, MPI_Comm_rank, MPI_Comm_size, MPI_INFO_NULL,   &
+  !  &                                 MPI_COMM_TYPE_SHARED, MPI_Allreduce, MPI_Allgather, MPI_INT, MPI_MAX
+  USE mpi
+!! << JM_20260922
 
   USE comin_plugin_interface,  ONLY : comin_callback_register, comin_var_get, t_comin_var_descriptor,     &
     &                                 comin_parallel_get_host_mpi_comm, comin_parallel_get_host_mpi_rank, &

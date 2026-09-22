@@ -6,7 +6,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/../cmake")
 message(STATUS "Looking for FindNetCDF.cmake in: ${CMAKE_MODULE_PATH}")
 
 # use this for horeka module lib/netcdf-fortran/4.6: 
-set(NF_CONFIG_BIN "/software/all/lib/netcdf-fortran/4.6_intel_2025.1_llvm_openmpi_5.0/bin")
+set(NF_CONFIG_BIN "/software/easybuild/x86_64/software/netCDF-Fortran/4.6.2-iimpi-2025b/bin")
+#set(NF_CONFIG_BIN "/software/all/lib/netcdf-fortran/4.6_intel_2025.1_llvm_openmpi_5.0/bin")
 
 # or instead set to whatever lies in $NETCDF_FORTRAN_BIN_DIR or $NETCDF_FORTRAN_ROOT/bin (example):
 #set(NF_CONFIG_BIN "/software/all/lib/netcdf-fortran/4.6_intel_2025.1_llvm_impi_2021.11/bin")
