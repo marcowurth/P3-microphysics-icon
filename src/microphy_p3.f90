@@ -110,9 +110,9 @@
  real, parameter :: mu_i_max = 20.
 
  ! physical and mathematical constants
- real           :: rhosur,rhosui,ar,br,f1r,f2r,ecr,rhow,kr,kc,bimm,aimm,rin,mi0,trplpt,  &
-                   eci,eri,bcn,cpw,e0,cons1,cons2,cons3,cons4,cons5,cons6,cons7,cons8,   &
-                   i_rhow,qsmall,nsmall,bsmall,zsmall,zlarge,cp,g,rd,rv,ep_2,i_cp,mw,    &
+ real           :: rhosur,rhosui,ar,br,f1r,f2r,ecr,k_cc,k_cr,k_rr,bimm,aimm,rin,mi0,trplpt, &
+                   eci,eri,bcn,cpw,e0,cons1,cons2,cons3,cons4,cons5,cons6,cons7,cons8,      &
+                   rhow,i_rhow,qsmall,nsmall,bsmall,zsmall,zlarge,cp,g,rd,rv,ep_2,i_cp,mw,  &
                    osm,vi,epsm,rhoa,map,ma,rr,bact,i_rm1,i_rm2,sig1,nanew1,f11,f21,sig2, &
                    nanew2,f12,f22,pi,thrd,sxth,piov3,piov6,rho_rimeMin,liqfracsmall,     &
                    rho_rimeMax,i_rho_rimeMax,max_Ni,dbrk,nmltratio,minVIS,               &
@@ -224,9 +224,10 @@
    autoAccr_param = 2
  endif
 
-! parameters for Seifert and Beheng (2001) autoconversion/accretion
- kc     = 9.44e+9
- kr     = 5.78e+3
+! parameters for Seifert and Beheng (2001) parameterization
+ k_cc     = 9.44e+9   ! autoconversion c+c or cloud selfcollection c+c
+ k_cr     = 5.78      ! accretion c+r
+ k_rr     = 4.33      ! rain selfcollection r+r
 
 ! specified cloud droplet concentration (m-3; used for 1-moment cloud only)
  nccnst_1 =   80.e+6  ! typical maritime value            (  80 cm-3)
@@ -251,7 +252,13 @@
  rhow   = 1000.
  cpw    = 4218.
  i_rhow = 1./rhow  !inverse of (max.) density of liquid water
- mu_r_constant = 0.  !fixed shape parameter for mu_r
+
+ if (autoAccr_param .eq. 1) then
+    ! mu_r=5 in size dist equals the mu_r=0 in mass dist used in SB warm processes
+    mu_r_constant = 5.  !fixed shape parameter for mu_r
+ else
+    mu_r_constant = 0.  !fixed shape parameter for mu_r
+ endif
 
  inv_Drmax = 1./0.002  ! inverse of maximum allowed rain number-weighted mean diameter (m-1)
 
@@ -3780,11 +3787,14 @@ call cpu_time(timer_start(3))
                !Seifert and Beheng (2001)
                 dum   = 1.-qc(i,k)*iSCF(i,k)/(qc(i,k)*iSCF(i,k)+qr(i,k)*iSPF(i,k)*       &
                         (SPF(i,k)-SPF_clr(i,k)))
+                dum = min(0.9,max(0.0, dum))
                 dum1  = 600.*dum**0.68*(1.-dum**0.68)**3
-                qcaut =  kc*1.9230769e-5*(nu(i,k)+2.)*(nu(i,k)+4.)/(nu(i,k)+1.)**2*      &
-                         (rho(i,k)*qc(i,k)*iSCF(i,k)*1.e-3)**4/                          &
-                         (rho(i,k)*nc(i,k)*iSCF(i,k)*1.e-6)**2*(1.+                      &
-                         dum1/(1.-dum)**2)*1000.*i_rho(i,k)*SCF(i,k)
+                dum2  = k_cc*1.9230769e8*( 2.* gamma(3.*(nu(i,k)+4.))                    &
+                        * gamma(3.*(nu(i,k)+2.)) * gamma(3.*(nu(i,k)+1.))**2             &
+                        - gamma(3.*(nu(i,k)+3.))**2 * gamma(3.*(nu(i,k)+1.))**2 )        &
+                        / gamma(3.*(nu(i,k)+2.))**4
+                qcaut = dum2*(1.+ dum1/(1.-dum)**2)*i_rho(i,k)*SCF(i,k)                  &
+                        *(rho(i,k)*qc(i,k)*iSCF(i,k))**4/(rho(i,k)*nc(i,k)*iSCF(i,k))**2
                 ncautc = qcaut*7.6923076e+9
 
              elseif (autoAccr_param.eq.2) then
@@ -3816,8 +3826,9 @@ call cpu_time(timer_start(3))
 
              if (autoAccr_param.eq.1) then
               !Seifert and Beheng (2001)
-                ncslf = -kc*(1.e-3*rho(i,k)*qc(i,k)*iSCF(i,k))**2*(nu(i,k)+2.)/          &
-                        (nu(i,k)+1.)*1.e+6*i_rho(i,k)*SCF(i,k)+ncautc
+                dum = gamma(3.*(nu(i,k)+3.)) / gamma(3.*(nu(i,k)+1.))                    &
+                      * ( gamma(3.*(nu(i,k)+1.)) / gamma(3.*(nu(i,k)+2.)) )**2
+                ncslf = -k_cc*(rho(i,k)*qc(i,k)*iSCF(i,k))**2*i_rho(i,k)*SCF(i,k)*dum
              elseif (autoAccr_param.eq.2 .or. autoAccr_param.eq.3) then
                !Khroutdinov and Kogan (2000) or Kogan (2013)
                 ncslf = 0.
@@ -3835,9 +3846,8 @@ call cpu_time(timer_start(3))
                 dum2  = (SPF(i,k)-SPF_clr(i,k)) !in-cloud Precipitation fraction
                 dum   = 1.-qc(i,k)*iSCF(i,k)/(qc(i,k)*iSCF(i,k)+qr(i,k)*iSPF(i,k))
                 dum1  = (dum/(dum+5.e-4))**4
-                qcacc = kr*rho(i,k)*0.001*qc(i,k)*iSCF(i,k)*qr(i,k)*iSPF(i,k)*dum1*dum2
-                ncacc = qcacc*rho(i,k)*0.001*(nc(i,k)*rho(i,k)*1.e-6)/(qc(i,k)*rho(i,k)* &  !note: (nc*iSCF)/(qc*iSCF) = nc/qc
-                        0.001)*1.e+6*i_rho(i,k)
+                qcacc = k_cr*rho(i,k)*qc(i,k)*iSCF(i,k)*qr(i,k)*iSPF(i,k)*dum1*dum2
+                ncacc = qcacc*nc(i,k)/qc(i,k)
              elseif (autoAccr_param.eq.2) then
                !Khairoutdinov and Kogan (2000)
                 dum2  = (SPF(i,k)-SPF_clr(i,k)) !in-cloud Precipitation fraction
@@ -3877,7 +3887,7 @@ call cpu_time(timer_start(3))
              endif
 
              if (autoAccr_param.eq.1.) then
-                nrslf = dum*kr*1.e-3*qr(i,k)*iSPF(i,k)*nr(i,k)*iSPF(i,k)*rho(i,k)*SPF(i,k)
+                nrslf = dum*k_rr*qr(i,k)*iSPF(i,k)*nr(i,k)*iSPF(i,k)*rho(i,k)*SPF(i,k)
              elseif (autoAccr_param.eq.2) then
                 nrslf = dum*5.78*nr(i,k)*iSPF(i,k)*qr(i,k)*iSPF(i,k)*rho(i,k)*SPF(i,k)
              elseif (autoAccr_param.eq.3) then
@@ -10525,7 +10535,6 @@ else
 
 !local variables
  real                            :: lammin,lammax,qc,nc
- integer                         :: dumi
 
 !--------------------------------------------------------------------------
 
@@ -10542,18 +10551,19 @@ else
           mu_c = max(mu_c,2.)
           mu_c = min(mu_c,15.)
 
-        ! interpolate for mass distribution spectral shape parameter (for SB warm processes)
-          if (autoAccr_param.eq.1) then
-             dumi = int(mu_c)+1
-             nu   = dnu(dumi)+(dnu(dumi+1)-dnu(dumi))*(mu_c-dumi)
-          endif
-
         ! calculate lamc
           lamc = (cons1*nc*(mu_c+3.)*(mu_c+2.)*(mu_c+1.)/qc)**thrd
 
+        ! calc mass distribution spectral shape parameter (for SB warm processes)
         ! apply lambda limiters
-          lammin = (mu_c+1.)*2.5e+4   ! min: 40 micron mean diameter
-          lammax = (mu_c+1.)*1.e+6    ! max:  1 micron mean diameter
+          if (autoAccr_param.eq.1) then
+             nu = max((mu_c-2.)/3., 0.)
+             lammin = (cons1/2.6e-10*(mu_c+3.)*(mu_c+2.)*(mu_c+1.))**thrd   ! min: 80 micron volume-mean diameter
+             lammax = (cons1/4.2e-15*(mu_c+3.)*(mu_c+2.)*(mu_c+1.))**thrd   ! max:  2 micron volume-mean diameter
+          else
+             lammin = (mu_c+1.)*2.5e+4   ! min: 40 micron size-mean diameter
+             lammax = (mu_c+1.)*1.e+6    ! max:  1 micron size-mean diameter
+          endif
 
           if (lamc.lt.lammin) then
              lamc = lammin
