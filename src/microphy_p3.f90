@@ -3800,7 +3800,7 @@ call cpu_time(timer_start(3))
                 dum   = 1.-qc(i,k)*iSCF(i,k)/(qc(i,k)*iSCF(i,k)+qr(i,k)*iSPF(i,k)*       &
                         (SPF(i,k)-SPF_clr(i,k)))
                 dum1  = 600.*dum**0.68*(1.-dum**0.68)**3
-                qcaut =  kc*1.9230769e-5*(nu(i,k)+2.)*(nu(i,k)+4.)/(nu(i,k)+1.)**2*      &
+                qcaut =  kc*1.9230769e+5*(nu(i,k)+2.)*(nu(i,k)+4.)/(nu(i,k)+1.)**2*      &
                          (rho(i,k)*qc(i,k)*iSCF(i,k)*1.e-3)**4/                          &
                          (rho(i,k)*nc(i,k)*iSCF(i,k)*1.e-6)**2*(1.+                      &
                          dum1/(1.-dum)**2)*1000.*i_rho(i,k)*SCF(i,k)
